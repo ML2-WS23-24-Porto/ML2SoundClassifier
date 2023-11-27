@@ -86,7 +86,6 @@ def main_loop(metadata,sr):
     n_mfcc = 40
     hop_length = round(sr * 0.025)
     win_length = round(sr * 0.023)
-    n_fft = 2**14
     time_size = 4 * sr // hop_length + 1
     # MelSpec parameters
     n_fft = 2 ** 14
