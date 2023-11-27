@@ -58,6 +58,7 @@ def conv_array(root_folder):
 
 root_folder = 'sound_datasets/urbansound8k/melspec'
 X, y = conv_array(root_folder)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=42)
 #X_test = X_test.astype('float32')
 #X_train = X_train.reshape(-1,32, 32, 3)  # reshaping for convnet
 
@@ -108,9 +109,9 @@ max_trials = 8 # how many model variations to test?
 max_trial_retrys = 3 # how many trials per variation? (same model could perform differently)
 early_stop = 3 # early stoppping after 3 epochs with no improvement of test data
 
-#10 Fold cross validation
+#10 Fold cross validation to obtain best hyperparameters
 def k_fold_cross_validation(X, y, num_epoch, batch_size):
-    kf = KFold(n_splits=2, shuffle=True, random_state=42)
+    kf = KFold(n_splits=10, shuffle=True, random_state=42)
 
     best_hyperparameters_per_fold = []
     total_hyperparameters = {
@@ -128,7 +129,7 @@ def k_fold_cross_validation(X, y, num_epoch, batch_size):
         y_train, y_val = y[train_index], y[val_index]
 
         EarlyStoppingCallback = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
-        tuner = RandomSearch(build_model, objective='val_acc', max_trials=8, executions_per_trial=3,
+        tuner = RandomSearch(build_model, objective='val_acc', max_trials=max_trials, executions_per_trial=max_trial_retrys,
                              directory=f'tuner_dir_fold_{fold}', project_name=f'project_fold_{fold}', metrics=["acc"])
         tuner.search(x=X_train, y=y_train, epochs=num_epoch, batch_size=batch_size,
                      validation_data=(X_val, y_val), callbacks=[EarlyStoppingCallback])
@@ -163,8 +164,21 @@ final_model = build_model(
 # Train the final model on the entire dataset
 EarlyStoppingCallback = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
 final_model.fit(X, y, epochs=num_epoch, batch_size=batch_size, callbacks=[EarlyStoppingCallback], validation_split=0.1,  metrics=["acc"])
+final_model.summary()
 
 #evaluate best model
-loss, acc = final_model.evaluate(X, y)
-print('loss:', loss)
-print('accuracy:', acc)
+validation_data = X_test, y_test
+history = final_model.evaluate(X, y)
+scores = final_model.evaluate(validation_data)
+print("Test accuracy:",scores[1])
+
+
+# plot training history
+plt.plot(history.history['loss'])
+plt.plot(history.history['val_loss'])
+plt.title("Test accuracy:",scores[1])
+plt.ylabel('loss')
+plt.xlabel('epoch')
+plt.legend(['loss','test_loss'], loc='upper left')
+plt.show()
+
