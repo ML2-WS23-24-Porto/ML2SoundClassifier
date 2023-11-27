@@ -51,6 +51,9 @@ def get_mel_spec(y,sr,n_mels,hop_length,n_fft=2**14,fmax = 8000): # this functio
     S_dB = librosa.power_to_db(S, ref=np.max)
     return S_dB
 
+def get_chroma(y,sr,n_chroma):
+    chroma = np.mean(librosa.feature.chroma_stft(y=y, sr=sr, n_chroma=n_chroma).T, axis=0)
+    return chroma
 def normalize_spectogram(clip): # bring spectograms in the form we want, suitable for ml models
     # Create a MinMaxScaler
     scaler = MinMaxScaler()
@@ -96,7 +99,7 @@ def main_loop(metadata,sr):
     print(len(metadata))
     for i in range(len(metadata)):
         filename = 'sound_datasets/urbansound8k/audio/fold' + str(metadata["fold"][i]) + '/' + metadata["slice_file_name"][i]
-        (sig, rate) = librosa.load(filename, sr=None)
+        (sig, rate) = librosa.load(filename, sr=None,res_type="kaiser_fast")
         sig_clean = data_preprocess(y=sig,sr=rate,target_sr=sr,path=filename)
         dataset[i] = sig_clean
         # computes the MFCCs
@@ -162,5 +165,5 @@ if __name__== "__main__":
     metadata.head(10)
     print(metadata)
     sr = 16000
-    process_example(1,sr)
+    process_example(20,sr)
     #main_loop(metadata,sr)
