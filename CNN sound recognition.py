@@ -33,8 +33,6 @@ plt.show()
 (X_train, y_train), (X_test, y_test) = #load urbansounds data
 X_train = X_train.astype('float32')
 X_test = X_test.astype('float32')
-X_train = normalize(X_train)
-X_test = normalize(X_test)
 #X_train = X_train.reshape(-1,32, 32, 3)  # reshaping for convnet
 
 y_train = np_utils.to_categorical(y_train)
@@ -58,8 +56,6 @@ def build_model(hp):
     model.add(MaxPool2D(pool_size=(2, 2)))
     model.add(Flatten())
 
-
-
     for i in range(hp.Int('n_connections', 1, 4)):
         model.add(Dense(hp.Choice(f'n_nodes',
                                   values=[128, 256, 512, 1024])))
@@ -75,15 +71,19 @@ def build_model(hp):
 
     return model
 
-tuner = RandomSearch(
-    build_model,
-    objective='val_acc',
-    max_trials=5,  # how many model variations to test?
-    executions_per_trial=3,  # how many trials per variation? (same model could perform differently)
-)
 
-NUM_EPOCH = 25
-tuner.search(x=X_train, y=y_train, epochs=NUM_EPOCH, batch_size=32, validation_data=(X_test, y_test))
+#training parameters
+num_epoch = 25
+batch_size =32
+max_trials = 8 # how many model variations to test?
+max_trial_retrys = 3 # how many trials per variation? (same model could perform differently)
+early_stop_patience = 3
+
+#Ealry stopping
+EarlyStoppingCallback = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop_patience )
+
+tuner = RandomSearch(build_model, objective='val_acc', max_trials=max_trials, executions_per_trial=3)
+tuner.search(x=X_train, y=y_train, epochs=num_epoch, batch_size=batch_size, validation_data=(X_test, y_test))
 
 print(tuner.get_best_models()[0].summary())
 print(tuner.get_best_hyperparameters()[0].values)
