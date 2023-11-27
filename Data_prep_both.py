@@ -54,7 +54,7 @@ def normalize_spectogram(clip): # bring spectograms in the form we want, suitabl
     print(df_normalized)
 
 
-def visualize(S,sr):
+def visualize(S,sr,clip_info):
     fig, ax = plt.subplots()
     img = librosa.display.specshow(S, x_axis='time', y_axis='mel', sr=sr, fmax=8000, ax=ax)
     fig.colorbar(img, ax=ax, format='%+2.0f dB')
@@ -62,7 +62,8 @@ def visualize(S,sr):
     plt.show()
 
 
-def main(files,sr):
+def main_loop(files,sr):
+    print(files)
     # MFCC parameters
     n_mfcc = 40
     hop_length = round(sr * 0.0125)
@@ -77,7 +78,7 @@ def main(files,sr):
     # read all wav file without resampling
     dataset = np.zeros(shape=[len(files), 4 * sr])
     dataset_mfcc = np.zeros(shape=[len(files), n_mfcc, mfcc_time_size])
-    dataset_melspec = np.zeros(shape=[len(files), n_mfcc, mfcc_time_size])
+    dataset_melspec = np.zeros(shape=[len(files), n_mels, 126])
     # example processing
     i = 0
     for f in files:
@@ -88,17 +89,17 @@ def main(files,sr):
 
         dataset_mfcc[i] = get_mfcc(sig_clean,sr,n_mfcc=n_mfcc,hop_length=hop_length,win_length=win_length,n_fft=n_fft)
         dataset_melspec[i] = get_mel_spec(sig_clean,sr,n_mels=n_mels,n_fft=n_fft,fmax=fmax)
+        print(f"prepared file{i} from {len(files)}!")
         i += 1
 
 
 
 
-def process_example(clip_nr,target_sr=16000):
+def process_example(clip_nr,sr=16000):
     # MFCC parameters
     n_mfcc = 40
     hop_length = round(sr * 0.0125)
     win_length = round(sr * 0.023)
-    n_fft = 2 ** 14
     mfcc_time_size = 4 * sr // hop_length + 1
     # MelSpec parameters
     n_fft = 2 ** 14
@@ -106,13 +107,14 @@ def process_example(clip_nr,target_sr=16000):
     fmax = 8000
     example_clip = clips[ids[clip_nr]]  # Get clip
     clip_info = example_clip.slice_file_name
-    y, sr = example_clip.audio
+    y, rate = example_clip.audio
     print(clip_info)
-    sig = data_cleaning(y, sr, target_sr=target_sr)
+    sig_clean = data_cleaning(y, rate, target_sr=sr)
     sig_mfcc = get_mfcc(sig_clean,sr,n_mfcc=n_mfcc,hop_length=hop_length,win_length=win_length,n_fft=n_fft)
     sig_melspec = get_mel_spec(sig_clean,sr,n_mels=n_mels,n_fft=n_fft,fmax=fmax)
-    visualize(sig_mfcc,target_sr)
-    visualize(sig_melspec,target_sr)
+    print(sig_melspec.shape)
+    visualize(sig_mfcc,sr,clip_info=clip_info)
+    visualize(sig_melspec,sr,clip_info=clip_info)
 
 
 
@@ -127,13 +129,12 @@ if __name__== "__main__":
     dataset = soundata.initialize(dataset_name='urbansound8k', data_home=r"sound_datasets/urbansound8k")
     ids = dataset.clip_ids  # the list of urbansound8k's clip ids
     clips = dataset.load_clips()  # Load all clips in the dataset
-    #example_clip = clips[ids[0]]  # Get the first clip
-    #clip_info = example_clip.slice_file_name
-    #y, sr = example_clip.audio
-
-
-
-
+    # init with files
+    _wav_dir_ = "sound_datasets/urbansound8k/audio/fold1"
+    files = librosa.util.find_files(_wav_dir_)
+    sr = 16000
+    #process_example(1,sr)
+    main_loop(files,sr)
 
 
 
