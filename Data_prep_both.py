@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib
 import soundata
 import librosa
 from librosa import display
@@ -8,6 +9,9 @@ from sklearn.preprocessing import MinMaxScaler
 import seaborn as sns
 import tqdm
 import os
+import imageio
+import torch
+import scipy
 
 # for downloading the dataset, put the sound dataset in the same folder as the file after downloading
 #dataset = soundata.initialize('urbansound8k')
@@ -20,6 +24,11 @@ import os
 
 
 def data_cleaning(y,sr,target_sr = 16000): #here we should perform noise reduction , zero padding and resampling,...?
+    # here we convert stereo to mono
+    #if y.shape[0] > 1:
+        # Do a mean of all channels and keep it in one channel
+    #    y = torch.mean(y, dim=0, keepdim=True)
+    #    print("converted stereo to mono!")
     y_resampled = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
     # zero padding
     if len(y_resampled) < 4 * target_sr:
@@ -36,9 +45,8 @@ def get_mfcc(y,sr,n_mfcc,hop_length,win_length,n_fft=2**14): # this function get
                                     win_length=win_length, n_mfcc=n_mfcc)
     return S
 
-
-def get_mel_spec(y,sr,n_mels,n_fft=2**14,fmax = 8000): # this function gets the mel spectogram
-    S = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=n_mels, fmax=fmax,n_fft=n_fft)
+def get_mel_spec(y,sr,n_mels,hop_length,n_fft=2**14,fmax = 8000): # this function gets the mel spectogram
+    S = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=n_mels,hop_length=hop_length, fmax=fmax,n_fft=n_fft)
     S_dB = librosa.power_to_db(S, ref=np.max)
     return S_dB
 
@@ -53,6 +61,11 @@ def normalize_spectogram(clip): # bring spectograms in the form we want, suitabl
     print("\nNormalized DataFrame:")
     print(df_normalized)
 
+def scale_minmax(X, min=0.0, max=1.0):
+    X_std = (X - X.min()) / (X.max() - X.min())
+    X_scaled = X_std * (max - min) + min
+    return X_scaled
+
 
 def visualize(S,sr,clip_info):
     fig, ax = plt.subplots()
@@ -62,34 +75,36 @@ def visualize(S,sr,clip_info):
     plt.show()
 
 
-def main_loop(files,sr):
-    print(files)
+def main_loop(metadata,sr):
     # MFCC parameters
     n_mfcc = 40
     hop_length = round(sr * 0.0125)
     win_length = round(sr * 0.023)
     n_fft = 2**14
-    mfcc_time_size = 4 * sr // hop_length + 1
+    time_size = 4 * sr // hop_length + 1
     # MelSpec parameters
     n_fft = 2 ** 14
     n_mels = 128
     fmax = 8000
     # create dataframes
     # read all wav file without resampling
-    dataset = np.zeros(shape=[len(files), 4 * sr])
-    dataset_mfcc = np.zeros(shape=[len(files), n_mfcc, mfcc_time_size])
-    dataset_melspec = np.zeros(shape=[len(files), n_mels, 126])
+    dataset = np.zeros(shape=[len(metadata), 4 * sr])
+    dataset_mfcc = np.zeros(shape=[len(metadata), n_mfcc, time_size])
+    dataset_melspec = np.zeros(shape=[len(metadata), n_mels, time_size])
     # example processing
-    i = 0
-    for f in files:
-        (sig, rate) = librosa.load(f, sr=None)
+    i=0
+    print(len(metadata))
+    for i in range(len(metadata)):
+        file_name = 'sound_datasets/urbansound8k/audio/fold' + str(metadata["fold"][i]) + '/' + metadata["slice_file_name"][i]
+        (sig, rate) = librosa.load(file_name, sr=None)
         sig_clean = data_cleaning(y=sig,sr=rate,target_sr=sr)
         dataset[i] = sig_clean
         # computes the MFCCs
-
         dataset_mfcc[i] = get_mfcc(sig_clean,sr,n_mfcc=n_mfcc,hop_length=hop_length,win_length=win_length,n_fft=n_fft)
-        dataset_melspec[i] = get_mel_spec(sig_clean,sr,n_mels=n_mels,n_fft=n_fft,fmax=fmax)
-        print(f"prepared file{i} from {len(files)}!")
+        dataset_melspec[i] = get_mel_spec(sig_clean,sr,n_mels=n_mels,hop_length=hop_length,n_fft=n_fft,fmax=fmax)
+        save_array_as_jpeg(dataset_mfcc[i],output_folder_type="mfcc",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
+        save_array_as_jpeg(dataset_melspec[i],output_folder_type="melspec",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
+        print(f"prepared file{i} from {len(metadata)}!")
         i += 1
 
 
@@ -117,6 +132,20 @@ def process_example(clip_nr,sr=16000):
     visualize(sig_melspec,sr,clip_info=clip_info)
 
 
+def save_array_as_jpeg(array, output_folder_type, fold,filename):
+    dir = "sound_datasets/urbansound8k/" + str(output_folder_type) + "/fold" + str(fold)
+    # Ensure the array values are in the valid range for an image (0 to 255)
+    img = scale_minmax(array, 0, 255).astype(np.uint8)
+    img = np.flip(img, axis=0)  # put low frequencies at the bottom in image
+    img = 255 - img  # invert. make black==more energy
+    # Create the output folder if it doesn't exist
+    os.makedirs(dir, exist_ok=True)
+    # Replace '.wav' with '.jpeg'
+    filename = filename.replace(".wav", ".jpeg")
+    # Construct the full path for saving the JPEG file in the 'melspec' folder
+    full_path = os.path.join(dir, filename)
+    # Save the array as a JPEG image
+    matplotlib.image.imsave(full_path, img)
 
 
 
@@ -125,16 +154,16 @@ if __name__== "__main__":
     # Metadata
     metadata = pd.read_csv('sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
     metadata.head(10)
-    # print(metadata)
-    dataset = soundata.initialize(dataset_name='urbansound8k', data_home=r"sound_datasets/urbansound8k")
-    ids = dataset.clip_ids  # the list of urbansound8k's clip ids
-    clips = dataset.load_clips()  # Load all clips in the dataset
+    print(metadata)
+    #dataset = soundata.initialize(dataset_name='urbansound8k', data_home=r"sound_datasets/urbansound8k")
+    #ids = dataset.clip_ids  # the list of urbansound8k's clip ids
+    #clips = dataset.load_clips()  # Load all clips in the dataset
     # init with files
-    _wav_dir_ = "sound_datasets/urbansound8k/audio/fold1"
-    files = librosa.util.find_files(_wav_dir_)
+    #_wav_dir_ = "sound_datasets/urbansound8k/audio/fold1"
+    #files = librosa.util.find_files(_wav_dir_)
     sr = 16000
     #process_example(1,sr)
-    main_loop(files,sr)
+    main_loop(metadata,sr)
 
 
 
