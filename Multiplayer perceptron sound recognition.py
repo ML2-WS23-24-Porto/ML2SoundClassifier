@@ -21,6 +21,17 @@ ds_train = ds_train.batch(128)
 ds_test = ds_test.map(normalize_img)
 ds_test = ds_test.batch(128)
 
+
+
+def model2(): #MLP
+    model2 = Sequential()
+    model2.add(Flatten(input_shape=(28,28)))
+    model2.add(Dense(4, activation='relu'))
+    model2.add(Dense(4, activation='relu'))
+    model2.add(Dense(4, activation='relu'))
+    model2.add(Dense(10, activation='softmax'))
+    return model2
+
 #define the neural network structure
 model = tf.keras.models.Sequential([tf.keras.layers.Flatten(input_shape=(28,28)), tf.keras.layers.Dense(4, activation='relu'), tf.keras.layers.Dense(4, activation='relu'), tf.keras.layers.Dense(4, activation='relu'), tf.keras.layers.Dense(10, activation='softmax')])
 #display neural network structure
