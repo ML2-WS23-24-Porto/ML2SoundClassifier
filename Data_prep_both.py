@@ -30,22 +30,15 @@ def data_cleaning(y,sr,target_sr = 16000): #here we should perform noise reducti
 
 
 
-def get_mfcc(y,sr): # this function gets the mfcc
-    # MFCC parameters
-    n_mfcc = 40
-    hop_length = round(target_sr * 0.0125)
-    win_length = round(target_sr * 0.023)
-    n_fft = 2 ** 14
-    mfcc_time_size = 4 * target_sr // hop_length + 1
+def get_mfcc(y,sr,n_mfcc,hop_length,win_length,n_fft=2**14): # this function gets the mfcc
     # computes the MFCCs
     S = librosa.feature.mfcc(y=y, sr=sr, n_fft=n_fft, hop_length=hop_length,
                                     win_length=win_length, n_mfcc=n_mfcc)
     return S
 
 
-def get_mel_spec(y,sr): # this function gets the mel spectogram
-    n_fft = 2 ** 14
-    S = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=128, fmax=8000,n_fft=n_fft)
+def get_mel_spec(y,sr,n_mels,n_fft=2**14,fmax = 8000): # this function gets the mel spectogram
+    S = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=n_mels, fmax=fmax,n_fft=n_fft)
     S_dB = librosa.power_to_db(S, ref=np.max)
     return S_dB
 
@@ -69,6 +62,62 @@ def visualize(S,sr):
     plt.show()
 
 
+def main(files,sr):
+    # MFCC parameters
+    n_mfcc = 40
+    hop_length = round(sr * 0.0125)
+    win_length = round(sr * 0.023)
+    n_fft = 2**14
+    mfcc_time_size = 4 * sr // hop_length + 1
+    # MelSpec parameters
+    n_fft = 2 ** 14
+    n_mels = 128
+    fmax = 8000
+    # create dataframes
+    # read all wav file without resampling
+    dataset = np.zeros(shape=[len(files), 4 * sr])
+    dataset_mfcc = np.zeros(shape=[len(files), n_mfcc, mfcc_time_size])
+    dataset_melspec = np.zeros(shape=[len(files), n_mfcc, mfcc_time_size])
+    # example processing
+    i = 0
+    for f in files:
+        (sig, rate) = librosa.load(f, sr=None)
+        sig_clean = data_cleaning(y=sig,sr=rate,target_sr=sr)
+        dataset[i] = sig_clean
+        # computes the MFCCs
+
+        dataset_mfcc[i] = get_mfcc(sig_clean,sr,n_mfcc=n_mfcc,hop_length=hop_length,win_length=win_length,n_fft=n_fft)
+        dataset_melspec[i] = get_mel_spec(sig_clean,sr,n_mels=n_mels,n_fft=n_fft,fmax=fmax)
+        i += 1
+
+
+
+
+def process_example(clip_nr,target_sr=16000):
+    # MFCC parameters
+    n_mfcc = 40
+    hop_length = round(sr * 0.0125)
+    win_length = round(sr * 0.023)
+    n_fft = 2 ** 14
+    mfcc_time_size = 4 * sr // hop_length + 1
+    # MelSpec parameters
+    n_fft = 2 ** 14
+    n_mels = 128
+    fmax = 8000
+    example_clip = clips[ids[clip_nr]]  # Get clip
+    clip_info = example_clip.slice_file_name
+    y, sr = example_clip.audio
+    print(clip_info)
+    sig = data_cleaning(y, sr, target_sr=target_sr)
+    sig_mfcc = get_mfcc(sig_clean,sr,n_mfcc=n_mfcc,hop_length=hop_length,win_length=win_length,n_fft=n_fft)
+    sig_melspec = get_mel_spec(sig_clean,sr,n_mels=n_mels,n_fft=n_fft,fmax=fmax)
+    visualize(sig_mfcc,target_sr)
+    visualize(sig_melspec,target_sr)
+
+
+
+
+
 # main loop for data prep:
 if __name__== "__main__":
     # Metadata
@@ -78,24 +127,12 @@ if __name__== "__main__":
     dataset = soundata.initialize(dataset_name='urbansound8k', data_home=r"sound_datasets/urbansound8k")
     ids = dataset.clip_ids  # the list of urbansound8k's clip ids
     clips = dataset.load_clips()  # Load all clips in the dataset
-    example_clip = clips[ids[0]]  # Get the first clip
-    clip_info = example_clip.slice_file_name
-    y, sr = example_clip.audio
-    print(clip_info)
+    #example_clip = clips[ids[0]]  # Get the first clip
+    #clip_info = example_clip.slice_file_name
+    #y, sr = example_clip.audio
 
 
 
-
-
-    # example processing
-    target_sr = 16000
-    sig = data_cleaning(y,sr,target_sr=target_sr)
-    sig_mfcc = get_mfcc(sig,target_sr)
-    sig_melspec = get_mel_spec(sig,target_sr)
-
-
-    visualize(sig_mfcc,target_sr)
-    visualize(sig_melspec,target_sr)
 
 
 
