@@ -1,0 +1,8 @@
+
+*.jpeg
+*.index
+*.json
+*.data-00000-of-00001
+tuner_dir_fold_0/project_fold_0/trial_2/checkpoint
+tuner_dir_fold_0/project_fold_0/trial_1/checkpoint
+tuner_dir_fold_0/project_fold_0/trial_0/checkpoint

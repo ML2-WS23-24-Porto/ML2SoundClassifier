@@ -13,6 +13,7 @@ from keras_tuner.engine.trial import Trial
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 import keras_tuner as kt
+from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.optimizers import Adam
@@ -29,7 +30,7 @@ from tensorflow.keras.layers import (
 )
 
 
-def normalize_spectrogram(clip):
+def normalize(clip):
     normalized_clip = (clip - np.min(clip)) / (np.max(clip) - np.min(clip))
     return normalized_clip
 
@@ -45,34 +46,19 @@ def conv_array(root_folder):
                 image_path = os.path.join(class_folder_path, filename)
                 image = Image.open(image_path)
                 image_array = np.array(image)
+                image_array = normalize(image_array)
                 all_labels.append(class_label)
                 image_data.append(image_array)
 
     image_data = np.array(image_data)
     all_labels = np.array(all_labels)
+    all_labels = to_categorical(all_labels - 1, num_classes=10)
 
-    # 10-fold cross-validation
-    kf = KFold(n_splits=10, shuffle=True, random_state=42)
-    datasets_train = []
-    datasets_test = []
-    for train_index, test_index in kf.split(image_data):
-        X_train, X_test = image_data[train_index], image_data[test_index]
-        y_train, y_test = all_labels[train_index], all_labels[test_index]
-        X_train = normalize_spectrogram(X_train)
-        X_test = normalize_spectrogram(X_test)
-        datasets_train.append((X_train, y_train))
-        datasets_test.append((X_test, y_test))
-        # print("Train images shape:", X_train.shape)
-        # print("Test images shape:", X_test.shape)
-        # print("Train labels shape:", y_train.shape)
-        # print("Test labels shape:", y_test.shape)
-    return datasets_train, datasets_train
+    return image_data, all_labels
 
 root_folder = 'sound_datasets/urbansound8k/melspec'
-print(conv_array(root_folder))
-(X_train, y_train), (X_test, y_test) = conv_array(root_folder)
-X_train = X_train.astype('float32')
-X_test = X_test.astype('float32')
+X, y = conv_array(root_folder)
+#X_test = X_test.astype('float32')
 #X_train = X_train.reshape(-1,32, 32, 3)  # reshaping for convnet
 
 
@@ -80,7 +66,7 @@ classes = ['air_conditioning', 'car_horn', 'children_playing', 'dog_bark', 'dril
 metadata = pd.read_csv('sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
 metadata.head(10)
 sns.countplot(metadata, y="class")
-plt.show()
+#plt.show()
 
 
 #Building a hypermodel:
@@ -89,7 +75,7 @@ plt.show()
 def build_model(hp):
     model = Sequential()
 
-    model.add(Conv2D(hp.Int('input_units', min_value=32, max_value=256, step=32), (3, 3), input_shape=X_train.shape[1:]))
+    model.add(Conv2D(hp.Int('input_units', min_value=32, max_value=256, step=32), (3, 3), input_shape=X.shape[1:]))
     model.add(Activation('tanh'))
     model.add(MaxPool2D(pool_size=(2, 2)))
 
@@ -111,10 +97,9 @@ def build_model(hp):
 
     model.compile(optimizer="adam", #optimization algorithm used is Adam
                   loss="categorical_crossentropy",
-                  metrics=["accuracy"])
+                  metrics=["acc"])
 
     return model
-
 
 #training parameters
 num_epoch = 1
@@ -123,17 +108,63 @@ max_trials = 8 # how many model variations to test?
 max_trial_retrys = 3 # how many trials per variation? (same model could perform differently)
 early_stop = 3 # early stoppping after 3 epochs with no improvement of test data
 
-#Ealry stopping
+#10 Fold cross validation
+def k_fold_cross_validation(X, y, num_epoch, batch_size):
+    kf = KFold(n_splits=2, shuffle=True, random_state=42)
+
+    best_hyperparameters_per_fold = []
+    total_hyperparameters = {
+        'input_units': 0,
+        'n_layers': 0,
+        'conv_0_units': 0,
+        'rate': 0,
+        'n_connections': 0,
+        'n_nodes': 0
+    }
+
+    for fold, (train_index, val_index) in enumerate(kf.split(X)):
+        print(f"Training on fold {fold + 1}")
+        X_train, X_val = X[train_index], X[val_index]
+        y_train, y_val = y[train_index], y[val_index]
+
+        EarlyStoppingCallback = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
+        tuner = RandomSearch(build_model, objective='val_acc', max_trials=8, executions_per_trial=3,
+                             directory=f'tuner_dir_fold_{fold}', project_name=f'project_fold_{fold}', metrics=["acc"])
+        tuner.search(x=X_train, y=y_train, epochs=num_epoch, batch_size=batch_size,
+                     validation_data=(X_val, y_val), callbacks=[EarlyStoppingCallback])
+
+        best_hyperparameters = tuner.oracle.get_best_trials(1)[0].hyperparameters.values
+        best_hyperparameters_per_fold.append(best_hyperparameters)
+
+    for fold_hyperparameters in best_hyperparameters_per_fold:
+        for key, value in fold_hyperparameters.items():
+            total_hyperparameters[key] += value
+
+    # Calculate the average hyperparameter values
+    num_folds = len(best_hyperparameters_per_fold)
+    average_hyperparameters = {key: value / num_folds for key, value in total_hyperparameters.items()}
+
+    return best_hyperparameters_per_fold, average_hyperparameters
+
+
+best_hyperparameters_per_fold, best_hyperparameters_overall = k_fold_cross_validation(X, y, num_epoch, batch_size)
+print(best_hyperparameters_per_fold)
+print(best_hyperparameters_overall)
+
+final_model = build_model(
+    input_units=best_hyperparameters_overall['input_units'],
+    n_layers=best_hyperparameters_overall['n_layers'],
+    conv_units=best_hyperparameters_overall['conv_0_units'],  # Adjust as needed based on your model architecture
+    rate=best_hyperparameters_overall['rate'],
+    n_connections=best_hyperparameters_overall['n_connections'],
+    n_nodes=best_hyperparameters_overall['n_nodes']
+)
+
+# Train the final model on the entire dataset
 EarlyStoppingCallback = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
+final_model.fit(X, y, epochs=num_epoch, batch_size=batch_size, callbacks=[EarlyStoppingCallback], validation_split=0.1,  metrics=["acc"])
 
-tuner = RandomSearch(build_model, objective='val_acc', max_trials=max_trials, executions_per_trial=3)
-tuner.search(x=X_train, y=y_train, epochs=num_epoch, batch_size=batch_size, validation_data=(X_test, y_test))
-
-print(tuner.get_best_models()[0].summary())
-print(tuner.get_best_hyperparameters()[0].values)
-model = tuner.get_best_models(num_models=1)[0]
-print (model.summary())
-# Evaluate the best model.
-loss, accuracy = model.evaluate(X_test, y_test)
+#evaluate best model
+loss, acc = final_model.evaluate(X, y)
 print('loss:', loss)
-print('accuracy:', accuracy)
+print('accuracy:', acc)
