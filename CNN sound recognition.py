@@ -28,6 +28,11 @@ from tensorflow.keras.layers import (
     Activation,
 )
 
+
+def normalize_spectrogram(clip):
+    normalized_clip = (clip - np.min(clip)) / (np.max(clip) - np.min(clip))
+    return normalized_clip
+
 def conv_array(root_folder):
     image_data = []
     all_labels = []
@@ -48,18 +53,23 @@ def conv_array(root_folder):
 
     # 10-fold cross-validation
     kf = KFold(n_splits=10, shuffle=True, random_state=42)
-
+    datasets_train = []
+    datasets_test = []
     for train_index, test_index in kf.split(image_data):
         X_train, X_test = image_data[train_index], image_data[test_index]
         y_train, y_test = all_labels[train_index], all_labels[test_index]
-        print("Train images shape:", X_train.shape)
-        print("Test images shape:", X_test.shape)
-        print("Train labels shape:", y_train.shape)
-        print("Test labels shape:", y_test.shape)
-
-    return X_train, y_train, X_test, y_test
+        X_train = normalize_spectrogram(X_train)
+        X_test = normalize_spectrogram(X_test)
+        datasets_train.append((X_train, y_train))
+        datasets_test.append((X_test, y_test))
+        # print("Train images shape:", X_train.shape)
+        # print("Test images shape:", X_test.shape)
+        # print("Train labels shape:", y_train.shape)
+        # print("Test labels shape:", y_test.shape)
+    return datasets_train, datasets_train
 
 root_folder = 'sound_datasets/urbansound8k/melspec'
+print(conv_array(root_folder))
 (X_train, y_train), (X_test, y_test) = conv_array(root_folder)
 X_train = X_train.astype('float32')
 X_test = X_test.astype('float32')
@@ -106,24 +116,24 @@ def build_model(hp):
     return model
 
 
-# #training parameters
-# num_epoch = 25
-# batch_size =32
-# max_trials = 8 # how many model variations to test?
-# max_trial_retrys = 3 # how many trials per variation? (same model could perform differently)
-# early_stop = 3 # early stoppping after 3 epochs with no improvement of test data
-#
-# #Ealry stopping
-# EarlyStoppingCallback = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
-#
-# # tuner = RandomSearch(build_model, objective='val_acc', max_trials=max_trials, executions_per_trial=3)
-# # tuner.search(x=X_train, y=y_train, epochs=num_epoch, batch_size=batch_size, validation_data=(X_test, y_test))
-# #
-# # print(tuner.get_best_models()[0].summary())
-# # print(tuner.get_best_hyperparameters()[0].values)
-# # model = tuner.get_best_models(num_models=1)[0]
-# # print (model.summary())
-# # # Evaluate the best model.
-# # loss, accuracy = model.evaluate(X_test, y_test)
-# # print('loss:', loss)
-# # print('accuracy:', accuracy)
+#training parameters
+num_epoch = 1
+batch_size =32
+max_trials = 8 # how many model variations to test?
+max_trial_retrys = 3 # how many trials per variation? (same model could perform differently)
+early_stop = 3 # early stoppping after 3 epochs with no improvement of test data
+
+#Ealry stopping
+EarlyStoppingCallback = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
+
+tuner = RandomSearch(build_model, objective='val_acc', max_trials=max_trials, executions_per_trial=3)
+tuner.search(x=X_train, y=y_train, epochs=num_epoch, batch_size=batch_size, validation_data=(X_test, y_test))
+
+print(tuner.get_best_models()[0].summary())
+print(tuner.get_best_hyperparameters()[0].values)
+model = tuner.get_best_models(num_models=1)[0]
+print (model.summary())
+# Evaluate the best model.
+loss, accuracy = model.evaluate(X_test, y_test)
+print('loss:', loss)
+print('accuracy:', accuracy)
