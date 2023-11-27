@@ -4,10 +4,11 @@ import pandas as pd
 import time, warnings
 import seaborn as sns
 import matplotlib.pyplot as plt
-import tensorflow as tf
+import tensorflow
 from PIL import Image
 from sklearn.model_selection import KFold
 import keras_tuner
+import keras
 from keras_tuner.tuners import RandomSearch
 from keras_tuner.engine.trial import Trial
 from sklearn.model_selection import train_test_split
@@ -53,14 +54,20 @@ def conv_array(root_folder):
     image_data = np.array(image_data)
     all_labels = np.array(all_labels)
     all_labels = to_categorical(all_labels - 1, num_classes=10)
-
     return image_data, all_labels
 
-root_folder = 'sound_datasets/urbansound8k/melspec'
+root_folder = r"C:\Users\Diederik\OneDrive\Bureaublad\studie tn\Minor vakken Porto\Machine Learning\Coding\sound_datasets\urbansound8k\melspec"
 X, y = conv_array(root_folder)
+print(X.shape)
+print(y.shape)
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=42)
-#X_test = X_test.astype('float32')
-#X_train = X_train.reshape(-1,32, 32, 3)  # reshaping for convnet
+metric = 'accuracy' #evaluation metric
+loss= 'categorical_crossentropy' #loss function
+
+#training parameters
+num_epoch = 1
+batch_size =128
+early_stop = 3 # early stoppping after 3 epochs with no improvement of test data
 
 
 classes = ['air_conditioning', 'car_horn', 'children_playing', 'dog_bark', 'drilling', 'engine_idling', 'gun_shot', 'jackhammer', 'siren', 'street_music']
@@ -84,7 +91,7 @@ def build_model(hp):
         model.add(Conv2D(hp.Int(f'conv_{i}_units', min_value=32, max_value=256, step=32), (3, 3)))
         model.add(Activation('tanh'))
         # adding dropout
-        model.add(tf.keras.layers.Dropout(rate=hp.Float('rate', min_value=0.1, max_value=0.5, step=0.1)))
+        model.add(tensorflow.keras.layers.Dropout(rate=hp.Float('rate', min_value=0.1, max_value=0.5, step=0.1)))
     model.add(MaxPool2D(pool_size=(2, 2)))
     model.add(Flatten())
 
@@ -96,18 +103,22 @@ def build_model(hp):
     model.add(Dense(10))
     model.add(Activation("softmax"))
 
-    model.compile(optimizer="adam", #optimization algorithm used is Adam
-                  loss="categorical_crossentropy",
-                  metrics=["acc"])
+    model.compile(optimizer=Adam(learning_rate=1e-3), #optimization algorithm used is Adam
+                  loss=loss,
+                  metrics=[metric])
 
     return model
 
 #training parameters
 num_epoch = 1
-batch_size =32
+batch_size =128
+early_stop = 3 # early stoppping after 3 epochs with no improvement of test data
+
+#objective to specify the objective to select the best models, and we use max_trials to specify the number of different models to try.
+objective='val_loss'
 max_trials = 8 # how many model variations to test?
 max_trial_retrys = 3 # how many trials per variation? (same model could perform differently)
-early_stop = 3 # early stoppping after 3 epochs with no improvement of test data
+
 
 #10 Fold cross validation to obtain best hyperparameters
 def k_fold_cross_validation(X, y, num_epoch, batch_size):
@@ -128,9 +139,10 @@ def k_fold_cross_validation(X, y, num_epoch, batch_size):
         X_train, X_val = X[train_index], X[val_index]
         y_train, y_val = y[train_index], y[val_index]
 
-        EarlyStoppingCallback = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
-        tuner = RandomSearch(build_model, objective='val_acc', max_trials=max_trials, executions_per_trial=max_trial_retrys,
-                             directory=f'tuner_dir_fold_{fold}', project_name=f'project_fold_{fold}', metrics=["acc"])
+        EarlyStoppingCallback = tensorflow.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
+        tuner = RandomSearch(build_model, objective=objective, max_trials=max_trials, executions_per_trial=max_trial_retrys,
+                             #directory=f'tuner_dir_fold_{fold}', project_name=f'project_fold_{fold}',
+                             metrics=[metric])
         tuner.search(x=X_train, y=y_train, epochs=num_epoch, batch_size=batch_size,
                      validation_data=(X_val, y_val), callbacks=[EarlyStoppingCallback])
 
@@ -147,30 +159,50 @@ def k_fold_cross_validation(X, y, num_epoch, batch_size):
 
     return best_hyperparameters_per_fold, average_hyperparameters
 
+#best_hyperparameters_per_fold, best_hyperparameters_overall = k_fold_cross_validation(X, y, num_epoch, batch_size)
 
-best_hyperparameters_per_fold, best_hyperparameters_overall = k_fold_cross_validation(X, y, num_epoch, batch_size)
-print(best_hyperparameters_per_fold)
-print(best_hyperparameters_overall)
+def model(hyperparameters):
+    hp = kt.HyperParameters()
+    for key, value in hyperparameters.items():
+        hp.Fixed(key, value)
 
-final_model = build_model(
-    input_units=best_hyperparameters_overall['input_units'],
-    n_layers=best_hyperparameters_overall['n_layers'],
-    conv_units=best_hyperparameters_overall['conv_0_units'],  # Adjust as needed based on your model architecture
-    rate=best_hyperparameters_overall['rate'],
-    n_connections=best_hyperparameters_overall['n_connections'],
-    n_nodes=best_hyperparameters_overall['n_nodes']
-)
+    cmodel = build_model(hp)
+    return cmodel
 
-# Train the final model on the entire dataset
-EarlyStoppingCallback = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
-final_model.fit(X, y, epochs=num_epoch, batch_size=batch_size, callbacks=[EarlyStoppingCallback], validation_split=0.1,  metrics=["acc"])
-final_model.summary()
 
-#evaluate best model
+#creating custom hyperparameters to inspect model performance
+custom_hyperparameters = {
+        'input_units': 224,
+        'n_layers': 4,
+        'conv_0_units': 96,
+        'rate': 0.4,
+        'n_connections': 3,
+        'n_nodes': 256,
+        'conv_1_units': 32,
+        'conv_2_units': 32,
+        'conv_3_units': 32,
+    }
+
+custom_model = model(custom_hyperparameters)
+EarlyStoppingCallback = tensorflow.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
+custom_model.fit(X, y, epochs=num_epoch, batch_size=batch_size, callbacks=[EarlyStoppingCallback], validation_split=0.1)
+custom_model.summary()
+#evalutation
 validation_data = X_test, y_test
-history = final_model.evaluate(X, y)
-scores = final_model.evaluate(validation_data)
+history = custom_model.evaluate(X, y)
+scores = custom_model.evaluate(validation_data)
 print("Test accuracy:",scores[1])
+
+
+# final_model = model(best_hyperparameters_overall)
+# EarlyStoppingCallback = tensorflow.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
+# final_model.fit(X, y, epochs=num_epoch, batch_size=batch_size, callbacks=[EarlyStoppingCallback], validation_split=0.1)
+# final_model.summary()
+# #evaluate
+# validation_data = X_test, y_test
+# history = final_model.evaluate(X, y)
+# scores = final_model.evaluate(validation_data)
+# print("Test accuracy:",scores[1])
 
 
 # plot training history
