@@ -23,7 +23,7 @@ import scipy
 
 
 
-def data_cleaning(y,sr,target_sr = 16000): #here we should perform noise reduction , zero padding and resampling,...?
+def data_cleaning(y,sr,target_sr = 16000,path = None): #here we should perform noise reduction , zero padding and resampling,...?
     # here we convert stereo to mono
     #if y.shape[0] > 1:
         # Do a mean of all channels and keep it in one channel
@@ -31,6 +31,12 @@ def data_cleaning(y,sr,target_sr = 16000): #here we should perform noise reducti
     #    print("converted stereo to mono!")
     y_resampled = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
     # zero padding
+    if 4 * target_sr//len(y_resampled) >1:
+        sig_multiply = y_resampled
+        for i in range(4 * target_sr//len(y_resampled)-1):
+            sig_multiply = np.concatenate((sig_multiply, y_resampled), axis=0)
+        print(f"file hase been multiplied by {4 * target_sr//len(y_resampled) }! check {path}")
+        sig = np.concatenate((sig_multiply, np.zeros(4 * target_sr - len(sig_multiply))), axis=0)
     if len(y_resampled) < 4 * target_sr:
         sig = np.concatenate((y_resampled, np.zeros(4 * target_sr - len(y_resampled))), axis=0)
     else:
@@ -78,7 +84,7 @@ def visualize(S,sr,clip_info):
 def main_loop(metadata,sr):
     # MFCC parameters
     n_mfcc = 40
-    hop_length = round(sr * 0.0125)
+    hop_length = round(sr * 0.025)
     win_length = round(sr * 0.023)
     n_fft = 2**14
     time_size = 4 * sr // hop_length + 1
@@ -95,9 +101,9 @@ def main_loop(metadata,sr):
     i=0
     print(len(metadata))
     for i in range(len(metadata)):
-        file_name = 'sound_datasets/urbansound8k/audio/fold' + str(metadata["fold"][i]) + '/' + metadata["slice_file_name"][i]
-        (sig, rate) = librosa.load(file_name, sr=None)
-        sig_clean = data_cleaning(y=sig,sr=rate,target_sr=sr)
+        filename = 'sound_datasets/urbansound8k/audio/fold' + str(metadata["fold"][i]) + '/' + metadata["slice_file_name"][i]
+        (sig, rate) = librosa.load(filename, sr=None)
+        sig_clean = data_cleaning(y=sig,sr=rate,target_sr=sr,path=filename)
         dataset[i] = sig_clean
         # computes the MFCCs
         dataset_mfcc[i] = get_mfcc(sig_clean,sr,n_mfcc=n_mfcc,hop_length=hop_length,win_length=win_length,n_fft=n_fft)
