@@ -14,22 +14,18 @@ import torch
 import scipy
 
 # for downloading the dataset, put the sound dataset in the same folder as the file after downloading
-#dataset = soundata.initialize('urbansound8k')
-#dataset.download()  # download the dataset
-#dataset.validate()  # validate that all the expected files are there
+def download():
+    dataset = soundata.initialize('urbansound8k')
+    dataset.download()  # download the dataset
+    dataset.validate()  # validate that all the expected files are there
 
-#example_clip = dataset.choice_clip()  # choose a random example clip
-#print(example_clip)
-
-
-
-def data_cleaning(y,sr,target_sr = 16000,path = None): #here we should perform noise reduction , zero padding and resampling,...?
+def data_preprocess(y,sr,target_sr = 16000,path = None): #here we should perform noise reduction , zero padding and resampling,...?
     y_resampled = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
     # zero padding, duplicating sound
     if 4 * target_sr//len(y_resampled) >1:
         sig_multiply = y_resampled
-        for i in range(4 * target_sr//len(y_resampled)-1):
-            sig_multiply = np.concatenate((sig_multiply, y_resampled), axis=0)
+        for i in range(4 * target_sr//len(y_resampled)-1): # this copies the short sound, adds noise and appends it to the other sound
+            sig_multiply = np.concatenate((sig_multiply,add_noise(y_resampled)), axis=0)
         print(f"file hase been multiplied by {4 * target_sr//len(y_resampled) }! check {path}")
         sig = np.concatenate((sig_multiply, np.zeros(4 * target_sr - len(sig_multiply))), axis=0)
     elif len(y_resampled) < 4 * target_sr:
@@ -38,7 +34,11 @@ def data_cleaning(y,sr,target_sr = 16000,path = None): #here we should perform n
         sig = y_resampled
     return sig
 
-
+def add_noise(sound_clip):
+    noise = np.ones(len(sound_clip))
+    noise_amp = np.random.uniform(0.005, 0.008,size=len(sound_clip))
+    noisy_sound_clip = sound_clip + (noise_amp * noise)
+    return noisy_sound_clip
 
 def get_mfcc(y,sr,n_mfcc,hop_length,win_length,n_fft=2**14): # this function gets the mfcc
     # computes the MFCCs
@@ -97,7 +97,7 @@ def main_loop(metadata,sr):
     for i in range(len(metadata)):
         filename = 'sound_datasets/urbansound8k/audio/fold' + str(metadata["fold"][i]) + '/' + metadata["slice_file_name"][i]
         (sig, rate) = librosa.load(filename, sr=None)
-        sig_clean = data_cleaning(y=sig,sr=rate,target_sr=sr,path=filename)
+        sig_clean = data_preprocess(y=sig,sr=rate,target_sr=sr,path=filename)
         dataset[i] = sig_clean
         # computes the MFCCs
         dataset_mfcc[i] = get_mfcc(sig_clean,sr,n_mfcc=n_mfcc,hop_length=hop_length,win_length=win_length,n_fft=n_fft)
@@ -126,11 +126,11 @@ def process_example(clip_nr,sr=16000):
     example_clip = clips[ids[clip_nr]]  # Get clip
     clip_info = example_clip.slice_file_name
     y, rate = example_clip.audio
-    librosa.display.waveshow(y,rate)
+    librosa.display.waveshow(y=y,sr=rate)
     plt.show()
     print(clip_info)
-    sig_clean = data_cleaning(y, rate, target_sr=sr)
-    librosa.display.waveshow(sig_clean, sr)
+    sig_clean = data_preprocess(y, rate, target_sr=sr)
+    librosa.display.waveshow(y=sig_clean, sr=sr)
     plt.show()
     sig_mfcc = get_mfcc(sig_clean,sr,n_mfcc=n_mfcc,hop_length=hop_length,win_length=win_length,n_fft=n_fft)
     sig_melspec = get_mel_spec(sig_clean,sr,n_mels=n_mels,hop_length=hop_length,n_fft=n_fft,fmax=fmax)
@@ -161,12 +161,6 @@ if __name__== "__main__":
     metadata = pd.read_csv('sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
     metadata.head(10)
     print(metadata)
-    #dataset = soundata.initialize(dataset_name='urbansound8k', data_home=r"sound_datasets/urbansound8k")
-    #ids = dataset.clip_ids  # the list of urbansound8k's clip ids
-    #clips = dataset.load_clips()  # Load all clips in the dataset
-    # init with files
-    #_wav_dir_ = "sound_datasets/urbansound8k/audio/fold1"
-    #files = librosa.util.find_files(_wav_dir_)
     sr = 16000
-    #process_example(1,sr)
-    main_loop(metadata,sr)
+    process_example(1,sr)
+    #main_loop(metadata,sr)
