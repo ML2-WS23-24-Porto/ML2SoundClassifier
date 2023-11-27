@@ -35,9 +35,6 @@ X_train = X_train.astype('float32')
 X_test = X_test.astype('float32')
 #X_train = X_train.reshape(-1,32, 32, 3)  # reshaping for convnet
 
-y_train = np_utils.to_categorical(y_train)
-y_test = np_utils.to_categorical(y_test)
-
 #Building a hypermodel:
 # function to build a hypermodel
 # takes an argument from which to sample hyperparameters
@@ -65,7 +62,6 @@ def build_model(hp):
     model.add(Activation("softmax"))
 
     model.compile(optimizer="adam", #optimization algorithm used is Adam
-
                   loss="categorical_crossentropy",
                   metrics=["accuracy"])
 
@@ -77,10 +73,10 @@ num_epoch = 25
 batch_size =32
 max_trials = 8 # how many model variations to test?
 max_trial_retrys = 3 # how many trials per variation? (same model could perform differently)
-early_stop_patience = 3
+early_stop = 3 # early stoppping after 3 epochs with no improvement of test data
 
 #Ealry stopping
-EarlyStoppingCallback = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop_patience )
+EarlyStoppingCallback = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
 
 tuner = RandomSearch(build_model, objective='val_acc', max_trials=max_trials, executions_per_trial=3)
 tuner.search(x=X_train, y=y_train, epochs=num_epoch, batch_size=batch_size, validation_data=(X_test, y_test))
