@@ -24,20 +24,15 @@ import scipy
 
 
 def data_cleaning(y,sr,target_sr = 16000,path = None): #here we should perform noise reduction , zero padding and resampling,...?
-    # here we convert stereo to mono
-    #if y.shape[0] > 1:
-        # Do a mean of all channels and keep it in one channel
-    #    y = torch.mean(y, dim=0, keepdim=True)
-    #    print("converted stereo to mono!")
     y_resampled = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
-    # zero padding
+    # zero padding, duplicating sound
     if 4 * target_sr//len(y_resampled) >1:
         sig_multiply = y_resampled
         for i in range(4 * target_sr//len(y_resampled)-1):
             sig_multiply = np.concatenate((sig_multiply, y_resampled), axis=0)
         print(f"file hase been multiplied by {4 * target_sr//len(y_resampled) }! check {path}")
         sig = np.concatenate((sig_multiply, np.zeros(4 * target_sr - len(sig_multiply))), axis=0)
-    if len(y_resampled) < 4 * target_sr:
+    elif len(y_resampled) < 4 * target_sr:
         sig = np.concatenate((y_resampled, np.zeros(4 * target_sr - len(y_resampled))), axis=0)
     else:
         sig = y_resampled
@@ -116,6 +111,9 @@ def main_loop(metadata,sr):
 
 
 def process_example(clip_nr,sr=16000):
+    dataset = soundata.initialize(dataset_name='urbansound8k', data_home="sound_datasets/urbansound8k")
+    ids = dataset.clip_ids  # the list of urbansound8k's clip ids
+    clips = dataset.load_clips()
     # MFCC parameters
     n_mfcc = 40
     hop_length = round(sr * 0.0125)
@@ -128,11 +126,14 @@ def process_example(clip_nr,sr=16000):
     example_clip = clips[ids[clip_nr]]  # Get clip
     clip_info = example_clip.slice_file_name
     y, rate = example_clip.audio
+    librosa.display.waveshow(y,rate)
+    plt.show()
     print(clip_info)
     sig_clean = data_cleaning(y, rate, target_sr=sr)
+    librosa.display.waveshow(sig_clean, sr)
+    plt.show()
     sig_mfcc = get_mfcc(sig_clean,sr,n_mfcc=n_mfcc,hop_length=hop_length,win_length=win_length,n_fft=n_fft)
-    sig_melspec = get_mel_spec(sig_clean,sr,n_mels=n_mels,n_fft=n_fft,fmax=fmax)
-    print(sig_melspec.shape)
+    sig_melspec = get_mel_spec(sig_clean,sr,n_mels=n_mels,hop_length=hop_length,n_fft=n_fft,fmax=fmax)
     visualize(sig_mfcc,sr,clip_info=clip_info)
     visualize(sig_melspec,sr,clip_info=clip_info)
 
@@ -169,15 +170,3 @@ if __name__== "__main__":
     sr = 16000
     #process_example(1,sr)
     main_loop(metadata,sr)
-
-
-
-    #for index_num, row in tqdm.tqdm(df.iterrows(), total=len(df)):
-    #    file = os.path.join(
-    #        os.path.abspath('/kaggle/input/urbansound8k/'), "fold" + str(row["fold"]) + "/",
-    #        str(row["slice_file_name"]),
-    #    )
-    #    label = row["class"]
-
-
-# after this ml model
