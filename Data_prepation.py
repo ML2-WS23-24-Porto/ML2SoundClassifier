@@ -17,31 +17,6 @@ import os
 #example_clip = dataset.choice_clip()  # choose a random example clip
 #print(example_clip)
 
-
-# audio: The clip's audio
-  #           * np.ndarray - audio signal
-  #           * float - sample rate,
-  # class_id: The clip's class id.
-  #           * int - integer representation of the class label (0-9). See Dataset Info in the documentation for mapping,
-  # class_label: The clip's class label.
-  #           * str - string class name: air_conditioner, car_horn, children_playing, dog_bark, drilling, engine_idling, gun_shot, jackhammer, siren, street_music,
-  # fold: The clip's fold.
-  #           * int - fold number (1-10) to which this clip is allocated. Use these folds for cross validation,
-  # freesound_end_time: The clip's end time in Freesound.
-  #           * float - end time in seconds of the clip in the original freesound recording,
-  # freesound_id: The clip's Freesound ID.
-  #           * str - ID of the freesound.org recording from which this clip was taken,
-  # freesound_start_time: The clip's start time in Freesound.
-  #           * float - start time in seconds of the clip in the original freesound recording,
-  # salience: The clip's salience.
-  #           * int - annotator estimate of class sailence in the clip: 1 = foreground, 2 = background,
-  # slice_file_name: The clip's slice filename.
-  #           * str - The name of the audio file. The name takes the following format: [fsID]-[classID]-[occurrenceID]-[sliceID].wav,
-  # tags: The clip's tags.
-  #           * annotations.Tags - tag (label) of the clip + confidence. In UrbanSound8K every clip has one tag,
-  #
-
-
 dataset = soundata.initialize(dataset_name='urbansound8k',data_home="/home/elias88348/sound_datasets/urbansound8k")
 ids = dataset.clip_ids  # the list of urbansound8k's clip ids
 clips = dataset.load_clips()  # Load all clips in the dataset
