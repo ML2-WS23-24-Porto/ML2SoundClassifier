@@ -8,7 +8,7 @@ import tensorflow
 from PIL import Image
 from sklearn.model_selection import KFold
 import keras_tuner
-import keras
+from tensorflow import keras
 from keras_tuner.tuners import RandomSearch
 from keras_tuner.engine.trial import Trial
 from sklearn.model_selection import train_test_split
@@ -30,6 +30,56 @@ from tensorflow.keras.layers import (
     Activation,
 )
 
+
+# Not Installed:
+#      - Nsight for Visual Studio 2022
+#        Reason: VS2022 was not found
+#      - Nsight for Visual Studio 2019
+#        Reason: VS2019 was not found
+#      - Nsight for Visual Studio 2017
+#        Reason: VS2017 was not found
+#      - Integrated Graphics Frame Debugger and Profiler
+#        Reason: see https://developer.nvidia.com/nsight-
+#some code for activating my gpu
+print("Num GPUs Available: ", len(tensorflow.config.experimental.list_physical_devices('GPU')))
+physical_devices = tensorflow.config.list_physical_devices('GPU')
+for device in physical_devices:
+    tensorflow.config.experimental.set_memory_growth(device, True)
+
+#class for plotting
+class PlotLearning(keras.callbacks.Callback):
+    def on_train_begin(self, logs={}):
+        self.metrics = {}
+        for metric in logs:
+            self.metrics[metric] = []
+
+    def on_epoch_end(self, epoch, logs={}):
+        # Storing metrics
+        for metric in logs:
+            if metric in self.metrics:
+                self.metrics[metric].append(logs.get(metric))
+            else:
+                self.metrics[metric] = [logs.get(metric)]
+
+        # Plotting
+        metrics = [x for x in logs if 'val' not in x]
+
+        f, axs = plt.subplots(1, len(metrics), figsize=(15, 5))
+
+        for i, metric in enumerate(metrics):
+            axs[i].plot(range(1, epoch + 2),
+                        self.metrics[metric],
+                        label=metric)
+            if logs['val_' + metric]:
+                axs[i].plot(range(1, epoch + 2),
+                            self.metrics['val_' + metric],
+                            label='val_' + metric)
+
+            axs[i].legend()
+            axs[i].grid()
+
+        plt.tight_layout()
+        plt.show()
 
 def normalize(clip):
     normalized_clip = (clip - np.min(clip)) / (np.max(clip) - np.min(clip))
@@ -62,11 +112,13 @@ print(X.shape)
 print(y.shape)
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=42)
 metric = 'accuracy' #evaluation metric
+#metric = tensorflow.keras.metrics.MeanAveragePrecisionMetric(topn=2)
 loss= 'categorical_crossentropy' #loss function
 
+
 #training parameters
-num_epoch = 1
-batch_size =128
+num_epoch = 20
+batch_size = 256
 early_stop = 3 # early stoppping after 3 epochs with no improvement of test data
 
 
@@ -110,7 +162,7 @@ def build_model(hp):
     return model
 
 #training parameters
-num_epoch = 1
+num_epoch = 2
 batch_size =128
 early_stop = 3 # early stoppping after 3 epochs with no improvement of test data
 
@@ -167,50 +219,37 @@ def model(hyperparameters):
         hp.Fixed(key, value)
 
     cmodel = build_model(hp)
-    return cmodel
+    EarlyStoppingCallback = tensorflow.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
+    cmodel.fit(X, y, epochs=num_epoch, batch_size=batch_size, callbacks=[EarlyStoppingCallback, PlotLearning()], validation_split=0.1)
+    cmodel.summary()
 
+    #evalutation
+    history = cmodel.evaluate(X, y)
+    scores = cmodel.evaluate(X_test, y_test)
+    print("Test accuracy:", scores[1])
 
-#creating custom hyperparameters to inspect model performance
+    # Plot training history
+    #plt.plot(history.history['loss'])
+    print(history.history.keys())
+    plt.plot(history.history['val_loss'])  # Add validation loss if available
+    plt.title("Training Loss")
+    plt.ylabel('Loss')
+    plt.xlabel('Epoch')
+    plt.legend(['Training Loss', 'Validation Loss'], loc='upper left')
+    plt.show()
+
+#creating custom hyperparameters to inspect model performance,inspired by the network we found on kaggle
 custom_hyperparameters = {
         'input_units': 224,
-        'n_layers': 4,
-        'conv_0_units': 96,
-        'rate': 0.4,
-        'n_connections': 3,
-        'n_nodes': 256,
-        'conv_1_units': 32,
-        'conv_2_units': 32,
-        'conv_3_units': 32,
+        'n_layers': 2,
+        'conv_0_units': 64,
+        'rate': 0.2,
+        'n_connections': 1,
+        'n_nodes': 1012,
+        'conv_1_units': 128,
     }
 
-custom_model = model(custom_hyperparameters)
-EarlyStoppingCallback = tensorflow.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
-custom_model.fit(X, y, epochs=num_epoch, batch_size=batch_size, callbacks=[EarlyStoppingCallback], validation_split=0.1)
-custom_model.summary()
-#evalutation
-validation_data = X_test, y_test
-history = custom_model.evaluate(X, y)
-scores = custom_model.evaluate(validation_data)
-print("Test accuracy:",scores[1])
+model(custom_hyperparameters)
+#model(best_hyperparameters_overall)
 
-
-# final_model = model(best_hyperparameters_overall)
-# EarlyStoppingCallback = tensorflow.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
-# final_model.fit(X, y, epochs=num_epoch, batch_size=batch_size, callbacks=[EarlyStoppingCallback], validation_split=0.1)
-# final_model.summary()
-# #evaluate
-# validation_data = X_test, y_test
-# history = final_model.evaluate(X, y)
-# scores = final_model.evaluate(validation_data)
-# print("Test accuracy:",scores[1])
-
-
-# plot training history
-plt.plot(history.history['loss'])
-plt.plot(history.history['val_loss'])
-plt.title("Test accuracy:",scores[1])
-plt.ylabel('loss')
-plt.xlabel('epoch')
-plt.legend(['loss','test_loss'], loc='upper left')
-plt.show()
 
