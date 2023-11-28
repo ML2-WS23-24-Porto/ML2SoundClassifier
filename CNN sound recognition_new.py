@@ -86,10 +86,9 @@ def conv_array(root_folder):
                 image_array = np.array(image)
                 image_array = normalize(image_array)
                 new_filename = filename.replace('.jpeg', '.wav')
+                row_num = metadata[metadata['slice_file_name'] == new_filename].index
                 print(filename, new_filename)
-                
-                classID = metadata['classID'][new_filename]
-                all_labels.append(classID)
+                all_labels.append(metadata.iloc[row_num]['classID'])
                 image_data.append(image_array)
         image_data = np.array(image_data)
         all_labels = np.array(all_labels)
