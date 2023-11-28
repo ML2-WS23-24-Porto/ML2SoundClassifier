@@ -7,7 +7,7 @@ Bayesian optimization, Random search and Hyperband
 
 ideas for metrics:
 - Classification Mean Average Precision (cmAP)
-- k cross validation
+
 Available metrics
 Accuracy metrics
 Accuracy class
