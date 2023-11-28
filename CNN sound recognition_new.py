@@ -179,30 +179,29 @@ def model_k_cross(hyperparameters, data):
     for key, value in hyperparameters.items():
         hp.Fixed(key, value)
 
-    #folds[f"fold{class_label}"] = [image_data, all_labels]
     for fold_name, fold_data in data.items():
         print(f"Training on {fold_name}")
         X_val, y_val = fold_data[0], fold_data[1]
         X_train = []
         y_train = []
-        for fold_num in range(1,11):
-            if f'fold{fold_num}' == fold_name or f'fold{fold_num}' not in data:
+
+
+        for other_fold_name, other_fold_data in data.items():
+            if other_fold_name == fold_name:
                 continue
-            fold_data_num_X = data[f'fold{fold_num}']
-            X = fold_data_num_X[0]
-            y = fold_data_num_X[1]
+
+            X = other_fold_data[0]
+            y = other_fold_data[1]
             X_train.extend(X)
             y_train.extend(y)
 
-        # print(X_val, y_val)
-        # print('training data')
-        # print(X_train, y_train)
+        X_train = np.array(X_train)
+        y_train = np.array(y_train)
 
         cmodel = build_model(hp)
-        cmodel.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+        cmodel.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
         EarlyStoppingCallback = tensorflow.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
-
 
         cmodel.fit(X_train, y_train, epochs=num_epoch, batch_size=batch_size,
                    callbacks=[EarlyStoppingCallback, PlotLearning()], validation_data=(X_val, y_val))
@@ -212,7 +211,6 @@ def model_k_cross(hyperparameters, data):
         print("Validation accuracy:", scores[1])
 
         # Optionally, evaluate the model on a test set or save the results as needed
-        # test_loss, test_accuracy = cmodel.evaluate(X_test, y_test)
 
         # Plot training history
         history = cmodel.history.history
@@ -224,6 +222,7 @@ def model_k_cross(hyperparameters, data):
         plt.xlabel('Epoch')
         plt.legend(['Training Loss', 'Validation Loss'], loc='upper left')
         plt.show()
+
 
 
 
