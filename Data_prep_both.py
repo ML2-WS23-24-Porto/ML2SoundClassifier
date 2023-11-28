@@ -40,16 +40,16 @@ def add_noise(sound_clip):
     noisy_sound_clip = sound_clip + (noise_amp * noise)
     return noisy_sound_clip
 
-def get_mfcc(y,sr,n_mfcc,hop_length,win_length,n_fft=2**14): # this function gets the mfcc
+# Here we extract the different spectograms
+def get_mfcc(y,dict): # this function gets the mfcc
     # computes the MFCCs
-    S = librosa.feature.mfcc(y=y, sr=sr, n_fft=n_fft, hop_length=hop_length,
-                                    win_length=win_length, n_mfcc=n_mfcc)
+    S = librosa.feature.mfcc(y=y,sr=dict["sr"],n_mfcc=dict["n_mfcc"],hop_length=dict["hop_length"],win_length=dict["win_length"],n_fft=dict["n_fft"])
     return S
-def get_chroma_stft(y,sr,n_chroma,hop_length,n_fft=2**14):
-    chroma_stft = librosa.feature.chroma_stft(y=y, sr=sr, n_chroma=n_chroma,hop_length=hop_length,n_fft=n_fft)
+def get_chroma_stft(y,dict):
+    chroma_stft = librosa.feature.chroma_stft(y=y, sr=dict["sr"], n_chroma=dict["n_chroma"], hop_length=dict["hop_length"],n_fft=dict["n_fft"])
     return chroma_stft
-def get_mel_spec(y,sr,n_mels,hop_length,n_fft=2**14,fmax = 8000): # this function gets the mel spectogram
-    S = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=n_mels,hop_length=hop_length, fmax=fmax,n_fft=n_fft)
+def get_mel_spec(y,dict): # this function gets the mel spectogram
+    S = librosa.feature.melspectrogram(y=y, sr=dict["sr"],n_mels=dict["n_mels"],hop_length=dict["hop_length"],n_fft=dict["n_fft"],fmax=dict["fmax"])
     S_dB = librosa.power_to_db(S, ref=np.max)
     return S_dB
 
@@ -69,6 +69,14 @@ def scale_minmax(X, min=0.0, max=1.0):
     X_scaled = X_std * (max - min) + min
     return X_scaled
 
+def get_features(S):
+    mean = [np.mean(S.T,axis=0)]
+    median = [np.median(S.T,axis=0)]
+    max =  [np.max(S.T,axis=0)]
+    min = [np.min(S.T, axis=0)]
+    skew = [scipy.stats.skew(S.T,axis=0)]
+    kurt = [scipy.stats.kurtosis(S.T,axis=0)]
+    return mean, max, min, median, skew, kurt
 
 def visualize(S,sr,clip_info):
     fig, ax = plt.subplots()
@@ -88,7 +96,7 @@ def main_loop(metadata,dict):
     # example processing
     print(len(metadata))
 
-    df = pd.DataFrame(columns=["slice_file_name","label","labelID","fold", "f_mfcc", "f_melspec","f_chroma"])
+    df = pd.DataFrame(columns=["slice_file_name","label","labelID","fold", "mean_mfcc", "mean_melspec","max_melspec","max_mfcc","min_melspec","min_mfcc","median_melspec","median_mfcc","skew_melspec","skew_mfcc","kurtosis_melspec","kurtosis_mfcc"])
 
     for i in tqdm.tqdm(range(len(metadata))):
         filename = 'sound_datasets/urbansound8k/audio/fold' + str(metadata["fold"][i]) + '/' + metadata["slice_file_name"][i]
@@ -96,12 +104,12 @@ def main_loop(metadata,dict):
         sig_clean = data_preprocess(y=sig,sr=rate,target_sr=dict["sr"],path=filename)
         #dataset[i] = sig_clean
         # computes the MFCCs
-        mfcc = get_mfcc(sig_clean,dict["sr"],n_mfcc=dict["n_mfcc"],hop_length=dict["hop_length"],win_length=dict["win_length"],n_fft=dict["n_fft"])
-        melspec = get_mel_spec(sig_clean,dict["sr"],n_mels=dict["n_mels"],hop_length=dict["hop_length"],n_fft=dict["n_fft"],fmax=dict["fmax"])
-        feature_mfcc = [np.mean(mfcc.T,axis=0)]
-        feature_melspec = [np.mean(melspec.T,axis=0)]
+        mfcc = get_mfcc(sig_clean,dict)
+        melspec = get_mel_spec(sig_clean,dict)
+        mean_mfcc, max_mfcc,min_mfcc,median_mfcc,skew_mfcc,kurtosis_mfcc = get_features(mfcc)
+        mean_melspec, max_melspec, min_melspec, median_melspec, skew_melspec, kurtosis_melspec = get_features(melspec)
         df = pd.concat([df,pd.DataFrame({"slice_file_name":metadata["slice_file_name"][i],"label":metadata["class"][i],"labelID":metadata["classID"][i],
-                                         "fold":metadata["fold"][i],"f_mfcc":feature_mfcc,"f_melspec":feature_melspec},index=[0])],ignore_index=True)
+                                         "fold":metadata["fold"][i],"mean_mfcc":mean_mfcc,"mean_melspec":mean_melspec,"max_melspec":max_melspec,"max_mfcc":max_mfcc,"min_melspec":min_melspec,"min_mfcc":min_mfcc,"median_melspec":median_melspec,"median_mfcc":median_mfcc,"skew_melspec":skew_melspec,"skew_mfcc":skew_mfcc,"kurtosis_melspec":kurtosis_melspec,"kurtosis_mfcc":kurtosis_mfcc},index=[0])],ignore_index=True)
         save_array_as_jpeg(mfcc,output_folder_type="mfcc",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
         save_array_as_jpeg(melspec,output_folder_type="melspec",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
         #print(f"prepared file{i} from {len(metadata)}!")
@@ -124,12 +132,10 @@ def process_example(clip_nr,dict):
     sig_clean = data_preprocess(y, rate, target_sr=dict["sr"])
     librosa.display.waveshow(y=sig_clean, sr=dict["sr"])
     plt.show()
-    mfcc = get_mfcc(sig_clean, dict["sr"], n_mfcc=dict["n_mfcc"], hop_length=dict["hop_length"],
-                    win_length=dict["win_length"], n_fft=dict["n_fft"])
-    melspec = get_mel_spec(sig_clean, dict["sr"], n_mels=dict["n_mels"], hop_length=dict["hop_length"],
-                           n_fft=dict["n_fft"], fmax=dict["fmax"])
+    mfcc = get_mfcc(sig_clean, dict)
+    melspec = get_mel_spec(sig_clean, dict)
     # we tried using the chromagram for features but it didn't work well
-    #chroma_stft = get_chroma_stft(sig_clean, dict["sr"], n_chroma=dict["n_chroma"], hop_length=dict["hop_length"],n_fft=dict["n_fft"])
+    #chroma_stft = get_chroma_stft(sig_clean, dict)
     feature_mfcc = [np.mean(mfcc.T, axis=0)]
     feature_melspec = [np.mean(melspec.T, axis=0)]
     visualize(mfcc,dict["sr"],clip_info=clip_info)
