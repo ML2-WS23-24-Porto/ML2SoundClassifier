@@ -79,32 +79,27 @@ def visualize(S,sr,clip_info):
     plt.show()
 
 
-def main_loop(metadata,sr):
-    # MFCC parameters
-    n_mfcc = 40
-    hop_length = round(sr * 0.025)
-    win_length = round(sr * 0.023)
-    time_size = 4 * sr // hop_length + 1
-    # MelSpec parameters
-    n_fft = 2 ** 14
-    n_mels = 128
-    fmax = 8000
+def main_loop(metadata,dict):
+    #  dict is a dictionary with all the calc parameters
     # create dataframes
     # read all wav file without resampling
-    dataset = np.zeros(shape=[len(metadata), 4 * sr])
-    dataset_mfcc = np.zeros(shape=[len(metadata), n_mfcc, time_size])
-    dataset_melspec = np.zeros(shape=[len(metadata), n_mels, time_size])
+    dataset = np.zeros(shape=[len(metadata), 4 * dict["sr"]])
+    dataset_mfcc = np.zeros(shape=[len(metadata), dict["n_mfcc"], dict["time_size"]])
+    dataset_melspec = np.zeros(shape=[len(metadata), dict["n_mels"], dict["time_size"]])
     # example processing
     i=0
     print(len(metadata))
+
+    df = pd.DataFrame(columns=["label", "mfcc_features", "melspec_features"])
+
     for i in range(len(metadata)):
         filename = 'sound_datasets/urbansound8k/audio/fold' + str(metadata["fold"][i]) + '/' + metadata["slice_file_name"][i]
         (sig, rate) = librosa.load(filename, sr=None,res_type="kaiser_fast")
-        sig_clean = data_preprocess(y=sig,sr=rate,target_sr=sr,path=filename)
+        sig_clean = data_preprocess(y=sig,sr=rate,target_sr=dict["sr"],path=filename)
         dataset[i] = sig_clean
         # computes the MFCCs
-        dataset_mfcc[i] = get_mfcc(sig_clean,sr,n_mfcc=n_mfcc,hop_length=hop_length,win_length=win_length,n_fft=n_fft)
-        dataset_melspec[i] = get_mel_spec(sig_clean,sr,n_mels=n_mels,hop_length=hop_length,n_fft=n_fft,fmax=fmax)
+        dataset_mfcc[i] = get_mfcc(sig_clean,dict["sr"],n_mfcc=dict["n_mfcc"],hop_length=dict["hop_length"],win_length=dict["win_length"],n_fft=dict["n_fft"])
+        dataset_melspec[i] = get_mel_spec(sig_clean,dict["sr"],n_mels=dict["n_mels"],hop_length=dict["hop_length"],n_fft=dict["n_fft"],fmax=dict["fmax"])
         save_array_as_jpeg(dataset_mfcc[i],output_folder_type="mfcc",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
         save_array_as_jpeg(dataset_melspec[i],output_folder_type="melspec",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
         print(f"prepared file{i} from {len(metadata)}!")
@@ -160,10 +155,21 @@ def save_array_as_jpeg(array, output_folder_type, fold,filename):
 
 # main loop for data prep:
 if __name__== "__main__":
+    dict = {}
+    # MFCC parameters
+    dict["sr"]=16000
+    dict["n_mfcc"] = 40
+    dict["hop_length"] = round(dict["sr"] * 0.025)
+    dict["win_length"] = round(dict["sr"] * 0.023)
+    dict["time_size"] = 4 * dict["sr"] // dict["hop_length"] + 1
+    # MelSpec parameters
+    dict["n_fft"] = 2 ** 14
+    dict["n_mels"] = 128
+    dict["fmax"] = 8000
+
     # Metadata
     metadata = pd.read_csv('sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
     metadata.head(10)
     print(metadata)
-    sr = 16000
-    process_example(20,sr)
-    #main_loop(metadata,sr)
+    #process_example(20,sr)
+    main_loop(metadata,dict)
