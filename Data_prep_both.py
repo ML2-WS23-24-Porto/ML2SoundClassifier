@@ -26,7 +26,7 @@ def data_preprocess(y,sr,target_sr = 16000,path = None): #here we should perform
         sig_multiply = y_resampled
         for i in range(4 * target_sr//len(y_resampled)-1): # this copies the short sound, adds noise and appends it to the other sound
             sig_multiply = np.concatenate((sig_multiply,add_noise(y_resampled)), axis=0)
-        print(f"file hase been multiplied by {4 * target_sr//len(y_resampled) }! check {path}")
+        #print(f"file hase been multiplied by {4 * target_sr//len(y_resampled) }! check {path}")
         sig = np.concatenate((sig_multiply, np.zeros(4 * target_sr - len(sig_multiply))), axis=0)
     elif len(y_resampled) < 4 * target_sr:
         sig = np.concatenate((y_resampled, np.zeros(4 * target_sr - len(y_resampled))), axis=0)
@@ -86,12 +86,11 @@ def main_loop(metadata,dict):
     #dataset_mfcc = np.zeros(shape=[len(metadata), dict["n_mfcc"], dict["time_size"]])
     #dataset_melspec = np.zeros(shape=[len(metadata), dict["n_mels"], dict["time_size"]])
     # example processing
-    i=0
     print(len(metadata))
 
     df = pd.DataFrame(columns=["slice_file_name","label","labelID","fold", "f_mfcc", "f_melspec","f_chroma"])
 
-    for i in range(len(metadata)):
+    for i in tqdm.tqdm(range(len(metadata))):
         filename = 'sound_datasets/urbansound8k/audio/fold' + str(metadata["fold"][i]) + '/' + metadata["slice_file_name"][i]
         (sig, rate) = librosa.load(filename, sr=None,res_type="kaiser_fast")
         sig_clean = data_preprocess(y=sig,sr=rate,target_sr=dict["sr"],path=filename)
@@ -99,18 +98,13 @@ def main_loop(metadata,dict):
         # computes the MFCCs
         mfcc = get_mfcc(sig_clean,dict["sr"],n_mfcc=dict["n_mfcc"],hop_length=dict["hop_length"],win_length=dict["win_length"],n_fft=dict["n_fft"])
         melspec = get_mel_spec(sig_clean,dict["sr"],n_mels=dict["n_mels"],hop_length=dict["hop_length"],n_fft=dict["n_fft"],fmax=dict["fmax"])
-        chroma_stft = get_chroma_stft(sig_clean,dict["sr"],n_chroma=dict["n_chroma"],hop_length=dict["hop_length"],n_fft=dict["n_fft"])
         feature_mfcc = [np.mean(mfcc.T,axis=0)]
         feature_melspec = [np.mean(melspec.T,axis=0)]
-        feature_chroma = [np.mean(chroma_stft.T,axis=0)]
         df = pd.concat([df,pd.DataFrame({"slice_file_name":metadata["slice_file_name"][i],"label":metadata["class"][i],"labelID":metadata["classID"][i],
-                                         "fold":metadata["fold"][i],"f_mfcc":feature_mfcc,"f_melspec":feature_melspec,"f_chroma":feature_chroma},index=[0])],ignore_index=True)
+                                         "fold":metadata["fold"][i],"f_mfcc":feature_mfcc,"f_melspec":feature_melspec},index=[0])],ignore_index=True)
         save_array_as_jpeg(mfcc,output_folder_type="mfcc",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
         save_array_as_jpeg(melspec,output_folder_type="melspec",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
-        save_array_as_jpeg(chroma_stft, output_folder_type="chroma_stft", fold=metadata["fold"][i],
-                           filename=metadata["slice_file_name"][i])
-        print(f"prepared file{i} from {len(metadata)}!")
-        i += 1
+        #print(f"prepared file{i} from {len(metadata)}!")
         if i%30 == 0: #backup
             df.to_csv("processed_data.csv", index=False)
 
@@ -134,10 +128,13 @@ def process_example(clip_nr,dict):
                     win_length=dict["win_length"], n_fft=dict["n_fft"])
     melspec = get_mel_spec(sig_clean, dict["sr"], n_mels=dict["n_mels"], hop_length=dict["hop_length"],
                            n_fft=dict["n_fft"], fmax=dict["fmax"])
+    # we tried using the chromagram for features but it didn't work well
+    #chroma_stft = get_chroma_stft(sig_clean, dict["sr"], n_chroma=dict["n_chroma"], hop_length=dict["hop_length"],n_fft=dict["n_fft"])
     feature_mfcc = [np.mean(mfcc.T, axis=0)]
     feature_melspec = [np.mean(melspec.T, axis=0)]
     visualize(mfcc,dict["sr"],clip_info=clip_info)
     visualize(melspec,dict["sr"],clip_info=clip_info)
+    #visualize(chroma_stft,dict["sr"],clip_info=clip_info)
 
 
 def save_array_as_jpeg(array, output_folder_type, fold,filename):
@@ -161,17 +158,17 @@ def save_array_as_jpeg(array, output_folder_type, fold,filename):
 if __name__== "__main__":
     dict = {}
     # MFCC parameters
-    dict["sr"]=16000
-    dict["n_mfcc"] = 64
+    dict["sr"]= 2**14
+    dict["n_mfcc"] = 40
     dict["hop_length"] = round(dict["sr"] * 0.0125)
     dict["win_length"] = round(dict["sr"] * 0.023)
     dict["time_size"] = 4 * dict["sr"] // dict["hop_length"] + 1
     # MelSpec parameters
-    dict["n_fft"] = 2 ** 14
-    dict["n_mels"] = 64
-    dict["fmax"] = 8000
+    dict["n_fft"] = 2 ** 14 # Window length of fft
+    dict["n_mels"] = 40
+    dict["fmax"] = 2**13
     # Chroma_stft
-    dict["n_chroma"] = 64
+    dict["n_chroma"] = 40
 
 
     # Metadata
