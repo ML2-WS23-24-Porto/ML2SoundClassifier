@@ -90,7 +90,7 @@ def main_loop(metadata,dict):
     i=0
     print(len(metadata))
 
-    df = pd.DataFrame(columns=["label", "mfcc_features", "melspec_features"])
+    df = pd.DataFrame(columns=["slice_file_name","label","labelID","fold", "f_mfcc", "f_melspec"])
 
     for i in range(len(metadata)):
         filename = 'sound_datasets/urbansound8k/audio/fold' + str(metadata["fold"][i]) + '/' + metadata["slice_file_name"][i]
@@ -100,10 +100,16 @@ def main_loop(metadata,dict):
         # computes the MFCCs
         dataset_mfcc[i] = get_mfcc(sig_clean,dict["sr"],n_mfcc=dict["n_mfcc"],hop_length=dict["hop_length"],win_length=dict["win_length"],n_fft=dict["n_fft"])
         dataset_melspec[i] = get_mel_spec(sig_clean,dict["sr"],n_mels=dict["n_mels"],hop_length=dict["hop_length"],n_fft=dict["n_fft"],fmax=dict["fmax"])
+        feature_mfcc = [np.mean(dataset_mfcc[i].T,axis=0)]
+        feature_melspec = [np.mean(dataset_melspec[i].T,axis=0)]
+        df = pd.concat([df,pd.DataFrame({"slice_file_name":metadata["slice_file_name"][i],"label":metadata["class"][i],"labelID":metadata["classID"][i],
+                                         "fold":metadata["fold"][i],"f_mfcc":feature_mfcc,"f_melspec":feature_melspec},index=[0])],ignore_index=True)
         save_array_as_jpeg(dataset_mfcc[i],output_folder_type="mfcc",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
         save_array_as_jpeg(dataset_melspec[i],output_folder_type="melspec",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
         print(f"prepared file{i} from {len(metadata)}!")
         i += 1
+        if i%30 == 0: #backup
+            df.to_csv("processed_data.csv", index=False)
 
 
 
