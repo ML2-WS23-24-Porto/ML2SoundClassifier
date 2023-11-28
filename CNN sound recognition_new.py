@@ -103,7 +103,7 @@ def conv_array(root_folder):
 
 
 metadata = pd.read_csv('sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
-root_folder = r"sound_datasets/urbansound8k/melspec"
+root_folder = r"C:\Users\Diederik\OneDrive\Bureaublad\studie tn\Minor vakken Porto\Machine Learning\Coding\sound_datasets - Copy\urbansound8k\melspec"
 data = conv_array(root_folder)
 #X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=42)
 metric = 'accuracy' #evaluation metric
