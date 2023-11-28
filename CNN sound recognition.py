@@ -31,21 +31,6 @@ from tensorflow.keras.layers import (
 )
 
 
-# Not Installed:
-#      - Nsight for Visual Studio 2022
-#        Reason: VS2022 was not found
-#      - Nsight for Visual Studio 2019
-#        Reason: VS2019 was not found
-#      - Nsight for Visual Studio 2017
-#        Reason: VS2017 was not found
-#      - Integrated Graphics Frame Debugger and Profiler
-#        Reason: see https://developer.nvidia.com/nsight-
-#some code for activating my gpu
-print("Num GPUs Available: ", len(tensorflow.config.experimental.list_physical_devices('GPU')))
-physical_devices = tensorflow.config.list_physical_devices('GPU')
-for device in physical_devices:
-    tensorflow.config.experimental.set_memory_growth(device, True)
-
 #class for plotting
 class PlotLearning(keras.callbacks.Callback):
     def on_train_begin(self, logs={}):
@@ -106,7 +91,7 @@ def conv_array(root_folder):
     all_labels = to_categorical(all_labels - 1, num_classes=10)
     return image_data, all_labels
 
-root_folder = r"C:\Users\Diederik\OneDrive\Bureaublad\studie tn\Minor vakken Porto\Machine Learning\Coding\sound_datasets\urbansound8k\melspec"
+root_folder = r"C:\Users\Diederik\OneDrive\Bureaublad\studie tn\Minor vakken Porto\Machine Learning\Coding\sound_datasets - Copy\urbansound8k\melspec"
 X, y = conv_array(root_folder)
 print(X.shape)
 print(y.shape)
@@ -115,19 +100,20 @@ metric = 'accuracy' #evaluation metric
 #metric = tensorflow.keras.metrics.MeanAveragePrecisionMetric(topn=2)
 loss= 'categorical_crossentropy' #loss function
 
-
 #training parameters
 num_epoch = 20
-batch_size = 256
+batch_size =128
 early_stop = 3 # early stoppping after 3 epochs with no improvement of test data
 
+#objective to specify the objective to select the best models, and we use max_trials to specify the number of different models to try.
+objective='val_loss'
+max_trials = 8 # how many model variations to test?
+max_trial_retrys = 3 # how many trials per variation? (same model could perform differently)
 
-classes = ['air_conditioning', 'car_horn', 'children_playing', 'dog_bark', 'drilling', 'engine_idling', 'gun_shot', 'jackhammer', 'siren', 'street_music']
-metadata = pd.read_csv('sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
-metadata.head(10)
-sns.countplot(metadata, y="class")
+# metadata = pd.read_csv('sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
+# metadata.head(10)
+# sns.countplot(metadata, y="class")
 #plt.show()
-
 
 #Building a hypermodel:
 # function to build a hypermodel
@@ -161,19 +147,9 @@ def build_model(hp):
 
     return model
 
-#training parameters
-num_epoch = 2
-batch_size =128
-early_stop = 3 # early stoppping after 3 epochs with no improvement of test data
-
-#objective to specify the objective to select the best models, and we use max_trials to specify the number of different models to try.
-objective='val_loss'
-max_trials = 8 # how many model variations to test?
-max_trial_retrys = 3 # how many trials per variation? (same model could perform differently)
-
 
 #10 Fold cross validation to obtain best hyperparameters
-def k_fold_cross_validation(X, y, num_epoch, batch_size):
+def tuner_k_cross(X, y, num_epoch, batch_size):
     kf = KFold(n_splits=10, shuffle=True, random_state=42)
 
     best_hyperparameters_per_fold = []
@@ -211,32 +187,55 @@ def k_fold_cross_validation(X, y, num_epoch, batch_size):
 
     return best_hyperparameters_per_fold, average_hyperparameters
 
-#best_hyperparameters_per_fold, best_hyperparameters_overall = k_fold_cross_validation(X, y, num_epoch, batch_size)
+#best_hyperparameters_per_fold, best_hyperparameters_overall = tuner_k_cross(X, y, num_epoch, batch_size)
 
-def model(hyperparameters):
+#get optimal hyperparameters using
+def tuner(X, y, num_epoch, batch_size):
+    EarlyStoppingCallback = tensorflow.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
+    tuner = RandomSearch(build_model, objective=objective, max_trials=max_trials, executions_per_trial=max_trial_retrys, metrics=[metric])
+    tuner.search(x=X, y=y, epochs=num_epoch, batch_size=batch_size, validation_split=0.1, callbacks=[EarlyStoppingCallback]) #10% is validation data
+    best_hyperparameters = tuner.oracle.get_best_trials(1)[0].hyperparameters.values
+    return best_hyperparameters
+
+hyperparameters2 = tuner(X, y, num_epoch, batch_size)
+print(hyperparameters2)
+
+def model_k_cross(hyperparameters, X, y):
+    kf = KFold(n_splits=10, shuffle=True)
     hp = kt.HyperParameters()
     for key, value in hyperparameters.items():
         hp.Fixed(key, value)
 
-    cmodel = build_model(hp)
-    EarlyStoppingCallback = tensorflow.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
-    cmodel.fit(X, y, epochs=num_epoch, batch_size=batch_size, callbacks=[EarlyStoppingCallback, PlotLearning()], validation_split=0.1)
-    cmodel.summary()
+    # Merge inputs and targets
+    inputs = np.concatenate((X_train, X_test), axis=0)
+    targets = np.concatenate((y_train, y_test), axis=0)
 
-    #evalutation
-    history = cmodel.evaluate(X, y)
-    scores = cmodel.evaluate(X_test, y_test)
-    print("Test accuracy:", scores[1])
+    fold_no =1
+    for train, test in kf.split(X, y):
+        cmodel = build_model(hp)
+        EarlyStoppingCallback = tensorflow.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
 
-    # Plot training history
-    #plt.plot(history.history['loss'])
-    print(history.history.keys())
-    plt.plot(history.history['val_loss'])  # Add validation loss if available
-    plt.title("Training Loss")
-    plt.ylabel('Loss')
-    plt.xlabel('Epoch')
-    plt.legend(['Training Loss', 'Validation Loss'], loc='upper left')
-    plt.show()
+        print('------------------------------------------------------------------------')
+        print(f'Training for fold {fold_no} ...')
+        cmodel.fit(inputs[train], targets[train], epochs=num_epoch, batch_size=batch_size,
+                   callbacks=[EarlyStoppingCallback, PlotLearning()], validation_split=0.1)
+        cmodel.summary()
+
+        # evaluation
+        history = cmodel.evaluate(X_test, y_test)  # Use X_test and y_test for evaluation
+        scores = cmodel.evaluate(X_test, y_test)
+        print("Test accuracy:", scores[1])
+
+        # Plot training history
+        print(history.keys())
+        plt.plot(history['val_loss'])  # Add validation loss if available
+        plt.title("Training Loss")
+        plt.ylabel('Loss')
+        plt.xlabel('Epoch')
+        plt.legend(['Training Loss', 'Validation Loss'], loc='upper left')
+        plt.show()
+        fold_no += 1
+
 
 #creating custom hyperparameters to inspect model performance,inspired by the network we found on kaggle
 custom_hyperparameters = {
@@ -249,7 +248,7 @@ custom_hyperparameters = {
         'conv_1_units': 128,
     }
 
-model(custom_hyperparameters)
+model_k_cross(custom_hyperparameters, X, y)
 #model(best_hyperparameters_overall)
 
 
