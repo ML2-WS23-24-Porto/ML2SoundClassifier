@@ -13,6 +13,12 @@ from keras_tuner.tuners import RandomSearch
 from keras_tuner.engine.trial import Trial
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import LeaveOneGroupOut, StratifiedKFold, GridSearchCV
+from sklearn.pipeline import Pipeline
+from sklearn.metrics import accuracy_score, classification_report, f1_score
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+import numpy as np
+import random
 import keras_tuner as kt
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.utils import to_categorical
@@ -87,28 +93,25 @@ def conv_array(root_folder):
                 image_array = normalize(image_array)
                 new_filename = filename.replace('.jpeg', '.wav')
                 row_num = metadata[metadata['slice_file_name'] == new_filename].index
-                print(filename, new_filename)
                 all_labels.append(metadata.iloc[row_num]['classID'])
                 image_data.append(image_array)
         image_data = np.array(image_data)
         all_labels = np.array(all_labels)
         all_labels = to_categorical(all_labels - 1, num_classes=10)
-        folds[f"fold{class_label}"] = [image_data, all_labels ]
+        folds[f"fold{class_label}"] = [image_data, all_labels]
     return folds
 
 
 metadata = pd.read_csv('sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
 root_folder = r"sound_datasets/urbansound8k/melspec"
-folds = conv_array(root_folder)
-print(folds)
-print(folds.shape)
+data = conv_array(root_folder)
 #X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=42)
 metric = 'accuracy' #evaluation metric
 #metric = tensorflow.keras.metrics.MeanAveragePrecisionMetric(topn=2)
 loss= 'categorical_crossentropy' #loss function
 
 #training parameters
-num_epoch = 20
+num_epoch = 1
 batch_size =128
 early_stop = 3 # early stoppping after 3 epochs with no improvement of test data
 
@@ -121,14 +124,19 @@ metadata = pd.read_csv('sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
 # metadata.head(10)
 # sns.countplot(metadata, y="class")
 #plt.show()
+input = data['fold1']
+input = input[0]
+print(input.shape[1:])
+print(input)
 
 #Building a hypermodel:
 # function to build a hypermodel
 # takes an argument from which to sample hyperparameters
 def build_model(hp):
     model = Sequential()
-
-    model.add(Conv2D(hp.Int('input_units', min_value=32, max_value=256, step=32), (3, 3), input_shape=X.shape[1:]))
+    input = data['fold1']
+    input = input[0]
+    model.add(Conv2D(hp.Int('input_units', min_value=32, max_value=256, step=32), (3, 3), input_shape=input.shape[1:]))
     model.add(Activation('tanh'))
     model.add(MaxPool2D(pool_size=(2, 2)))
 
@@ -165,40 +173,57 @@ def tuner(X, y, num_epoch, batch_size):
 #hyperparameters2 = tuner(X, y, num_epoch, batch_size)
 #print(hyperparameters2)
 
-def model_k_cross(hyperparameters, X, y):
+def model_k_cross(hyperparameters, data):
     hp = kt.HyperParameters()
     for key, value in hyperparameters.items():
         hp.Fixed(key, value)
 
-    # Merge inputs and targets
-    inputs = np.concatenate((X_train, X_test), axis=0)
-    targets = np.concatenate((y_train, y_test), axis=0)
+    #folds[f"fold{class_label}"] = [image_data, all_labels]
+    for fold_name, fold_data in data.items():
+        print(f"Training on {fold_name}")
+        X_val, y_val = fold_data[0], fold_data[1]
+        X_train = []
+        y_train = []
+        for fold_num in range(1,11):
+            if f'fold{fold_num}' == fold_name or f'fold{fold_num}' not in data:
+                continue
+            fold_data_num_X = data[f'fold{fold_num}']
+            X = fold_data_num_X[0]
+            y = fold_data_num_X[1]
+            X_train.extend(X)
+            y_train.extend(y)
 
-    fold_no =1
-    for train, test in kf.split(X, y):
+        # print(X_val, y_val)
+        # print('training data')
+        # print(X_train, y_train)
+
         cmodel = build_model(hp)
+        cmodel.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
         EarlyStoppingCallback = tensorflow.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
 
-        print('------------------------------------------------------------------------')
-        print(f'Training for fold {fold_no} ...')
-        cmodel.fit(inputs[train], targets[train], epochs=num_epoch, batch_size=batch_size,
-                   callbacks=[EarlyStoppingCallback, PlotLearning()], validation_split=0.1)
-        cmodel.summary()
 
-        # evaluation
-        history = cmodel.evaluate(X_test, y_test)  # Use X_test and y_test for evaluation
-        scores = cmodel.evaluate(X_test, y_test)
-        print("Test accuracy:", scores[1])
+        cmodel.fit(X_train, y_train, epochs=num_epoch, batch_size=batch_size,
+                   callbacks=[EarlyStoppingCallback, PlotLearning()], validation_data=(X_val, y_val))
+
+        # Evaluation
+        scores = cmodel.evaluate(X_val, y_val)
+        print("Validation accuracy:", scores[1])
+
+        # Optionally, evaluate the model on a test set or save the results as needed
+        # test_loss, test_accuracy = cmodel.evaluate(X_test, y_test)
 
         # Plot training history
+        history = cmodel.history.history
         print(history.keys())
-        plt.plot(history['val_loss'])  # Add validation loss if available
-        plt.title("Training Loss")
+        plt.plot(history['loss'])
+        plt.plot(history['val_loss'])
+        plt.title(f"Training Loss - Fold {fold_name}")
         plt.ylabel('Loss')
         plt.xlabel('Epoch')
         plt.legend(['Training Loss', 'Validation Loss'], loc='upper left')
         plt.show()
-        fold_no += 1
+
 
 
 #creating custom hyperparameters to inspect model performance,inspired by the network we found on kaggle
@@ -212,7 +237,7 @@ custom_hyperparameters = {
         'conv_1_units': 128,
     }
 
-#model_k_cross(custom_hyperparameters, X, y)
+model_k_cross(custom_hyperparameters, data)
 #model(best_hyperparameters_overall)
 
 
