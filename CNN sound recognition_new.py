@@ -176,6 +176,7 @@ def tuner(X, y, num_epoch, batch_size):
 
 def model_k_cross(hyperparameters, data):
     hp = kt.HyperParameters()
+    list_scores = []
     for key, value in hyperparameters.items():
         hp.Fixed(key, value)
 
@@ -184,7 +185,6 @@ def model_k_cross(hyperparameters, data):
         X_val, y_val = fold_data[0], fold_data[1]
         X_train = []
         y_train = []
-
 
         for other_fold_name, other_fold_data in data.items():
             if other_fold_name == fold_name:
@@ -203,20 +203,18 @@ def model_k_cross(hyperparameters, data):
 
         EarlyStoppingCallback = tensorflow.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
 
-        cmodel.fit(X_train, y_train, epochs=num_epoch, batch_size=batch_size,
+        history = cmodel.fit(X_train, y_train, epochs=num_epoch, batch_size=batch_size,
                    callbacks=[EarlyStoppingCallback, PlotLearning()], validation_data=(X_val, y_val))
 
         # Evaluation
         scores = cmodel.evaluate(X_val, y_val)
         print("Validation accuracy:", scores[1])
-
-        # Optionally, evaluate the model on a test set or save the results as needed
+        list_scores.append(scores)
 
         # Plot training history
-        history = cmodel.history.history
-        print(history.keys())
-        plt.plot(history['loss'])
-        plt.plot(history['val_loss'])
+        print(history.history.keys())
+        plt.plot(history.history['loss'])
+        plt.plot(history.history['val_loss'])
         plt.title(f"Training Loss - Fold {fold_name}")
         plt.ylabel('Loss')
         plt.xlabel('Epoch')
