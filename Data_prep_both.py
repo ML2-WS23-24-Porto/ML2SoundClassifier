@@ -88,34 +88,30 @@ def visualize(S,sr,clip_info):
 
 def main_loop(metadata,dict):
     #  dict is a dictionary with all the calc parameters
+    print("Processing " +str(len(metadata)) + " files")
     # create dataframes
-    # read all wav file without resampling
-    #dataset = np.zeros(shape=[len(metadata), 4 * dict["sr"]])
-    #dataset_mfcc = np.zeros(shape=[len(metadata), dict["n_mfcc"], dict["time_size"]])
-    #dataset_melspec = np.zeros(shape=[len(metadata), dict["n_mels"], dict["time_size"]])
-    # example processing
-    print(len(metadata))
-
     df = pd.DataFrame(columns=["slice_file_name","label","labelID","fold", "mean_mfcc", "mean_melspec","max_melspec","max_mfcc","min_melspec","min_mfcc","median_melspec","median_mfcc","skew_melspec","skew_mfcc","kurtosis_melspec","kurtosis_mfcc"])
 
     for i in tqdm.tqdm(range(len(metadata))):
         filename = 'sound_datasets/urbansound8k/audio/fold' + str(metadata["fold"][i]) + '/' + metadata["slice_file_name"][i]
         (sig, rate) = librosa.load(filename, sr=None,res_type="kaiser_fast")
         sig_clean = data_preprocess(y=sig,sr=rate,target_sr=dict["sr"],path=filename)
-        #dataset[i] = sig_clean
-        # computes the MFCCs
+        # computes the MFCCs and Melspecs
         mfcc = get_mfcc(sig_clean,dict)
         melspec = get_mel_spec(sig_clean,dict)
+        # Turns these to feature vectors
         mean_mfcc, max_mfcc,min_mfcc,median_mfcc,skew_mfcc,kurtosis_mfcc = get_features(mfcc)
         mean_melspec, max_melspec, min_melspec, median_melspec, skew_melspec, kurtosis_melspec = get_features(melspec)
+        #save features and metadata in pd Dataframe. Also save images of the Melspec and MFCC in folder for image ML
         df = pd.concat([df,pd.DataFrame({"slice_file_name":metadata["slice_file_name"][i],"label":metadata["class"][i],"labelID":metadata["classID"][i],
-                                         "fold":metadata["fold"][i],"mean_mfcc":mean_mfcc,"mean_melspec":mean_melspec,"max_melspec":max_melspec,"max_mfcc":max_mfcc,"min_melspec":min_melspec,"min_mfcc":min_mfcc,"median_melspec":median_melspec,"median_mfcc":median_mfcc,"skew_melspec":skew_melspec,"skew_mfcc":skew_mfcc,"kurtosis_melspec":kurtosis_melspec,"kurtosis_mfcc":kurtosis_mfcc},index=[0])],ignore_index=True)
+                                         "fold":metadata["fold"][i],"mean_mfcc":mean_mfcc,"mean_melspec":mean_melspec,"max_melspec":max_melspec,"max_mfcc":max_mfcc,
+                                         "min_melspec":min_melspec,"min_mfcc":min_mfcc,"median_melspec":median_melspec,"median_mfcc":median_mfcc,"skew_melspec":skew_melspec,
+                                         "skew_mfcc":skew_mfcc,"kurtosis_melspec":kurtosis_melspec,"kurtosis_mfcc":kurtosis_mfcc},index=[0])],ignore_index=True)
         save_array_as_jpeg(mfcc,output_folder_type="mfcc",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
         save_array_as_jpeg(melspec,output_folder_type="melspec",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
-        #print(f"prepared file{i} from {len(metadata)}!")
         if i%30 == 0: #backup
             df.to_csv("processed_data.csv", index=False)
-
+    df.to_csv("processed_data.csv", index=False)
 
 
 
@@ -180,6 +176,5 @@ if __name__== "__main__":
     # Metadata
     metadata = pd.read_csv('sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
     metadata.head(10)
-    print(metadata)
     #process_example(20,dict)
     main_loop(metadata,dict)
