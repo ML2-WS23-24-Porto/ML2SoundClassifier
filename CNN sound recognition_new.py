@@ -126,7 +126,8 @@ metadata = pd.read_csv('sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
 #plt.show()
 input = data['fold1']
 input = input[0]
-print(input.shape[1:])
+input = input[0]
+print(input.shape[:-1])
 print(input)
 
 #Building a hypermodel:
