@@ -173,6 +173,7 @@ if __name__== "__main__":
     # Chroma_stft
     dict["n_chroma"] = 64
 
+
     # Metadata
     metadata = pd.read_csv('sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
     metadata.head(10)
