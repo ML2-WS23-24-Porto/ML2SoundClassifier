@@ -71,12 +71,13 @@ def scale_minmax(X, min=0.0, max=1.0):
 
 def get_features(S):
     mean = [np.mean(S.T,axis=0)]
+    std = [np.std(S.T,axis=0)]
     median = [np.median(S.T,axis=0)]
-    max =  [np.max(S.T,axis=0)]
+    max = [np.max(S.T,axis=0)]
     min = [np.min(S.T, axis=0)]
     skew = [scipy.stats.skew(S.T,axis=0)]
     kurt = [scipy.stats.kurtosis(S.T,axis=0)]
-    return mean, max, min, median, skew, kurt
+    return mean,std, max, min, median, skew, kurt
 
 def visualize(S,sr,clip_info):
     fig, ax = plt.subplots()
@@ -90,7 +91,7 @@ def main_loop(metadata,dict):
     #  dict is a dictionary with all the calc parameters
     print("Processing " +str(len(metadata)) + " files")
     # create dataframes
-    df = pd.DataFrame(columns=["slice_file_name","label","labelID","fold", "mean_mfcc", "mean_melspec","max_melspec","max_mfcc","min_melspec","min_mfcc","median_melspec","median_mfcc","skew_melspec","skew_mfcc","kurtosis_melspec","kurtosis_mfcc"])
+    df = pd.DataFrame(columns=["slice_file_name","label","labelID","fold", "mean_mfcc", "mean_melspec","std_melspec","std_mfcc","max_melspec","max_mfcc","min_melspec","min_mfcc","median_melspec","median_mfcc","skew_melspec","skew_mfcc","kurtosis_melspec","kurtosis_mfcc"])
 
     for i in tqdm.tqdm(range(len(metadata))):
         filename = 'sound_datasets/urbansound8k/audio/fold' + str(metadata["fold"][i]) + '/' + metadata["slice_file_name"][i]
@@ -100,8 +101,8 @@ def main_loop(metadata,dict):
         mfcc = get_mfcc(sig_clean,dict)
         melspec = get_mel_spec(sig_clean,dict)
         # Turns these to feature vectors
-        mean_mfcc, max_mfcc,min_mfcc,median_mfcc,skew_mfcc,kurtosis_mfcc = get_features(mfcc)
-        mean_melspec, max_melspec, min_melspec, median_melspec, skew_melspec, kurtosis_melspec = get_features(melspec)
+        mean_mfcc,std_mfcc, max_mfcc,min_mfcc,median_mfcc,skew_mfcc,kurtosis_mfcc = get_features(mfcc)
+        mean_melspec,std_melspec, max_melspec, min_melspec, median_melspec, skew_melspec, kurtosis_melspec = get_features(melspec)
         #save features and metadata in pd Dataframe. Also save images of the Melspec and MFCC in folder for image ML
         df = pd.concat([df,pd.DataFrame({"slice_file_name":metadata["slice_file_name"][i],"label":metadata["class"][i],"labelID":metadata["classID"][i],
                                          "fold":metadata["fold"][i],"mean_mfcc":mean_mfcc,"mean_melspec":mean_melspec,"max_melspec":max_melspec,"max_mfcc":max_mfcc,
