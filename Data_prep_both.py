@@ -45,15 +45,14 @@ def get_mfcc(y,sr,n_mfcc,hop_length,win_length,n_fft=2**14): # this function get
     S = librosa.feature.mfcc(y=y, sr=sr, n_fft=n_fft, hop_length=hop_length,
                                     win_length=win_length, n_mfcc=n_mfcc)
     return S
-
+def get_chroma_stft(y,sr,n_chroma,hop_length,n_fft=2**14):
+    chroma_stft = librosa.feature.chroma_stft(y=y, sr=sr, n_chroma=n_chroma,hop_length=hop_length,n_fft=n_fft)
+    return chroma_stft
 def get_mel_spec(y,sr,n_mels,hop_length,n_fft=2**14,fmax = 8000): # this function gets the mel spectogram
     S = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=n_mels,hop_length=hop_length, fmax=fmax,n_fft=n_fft)
     S_dB = librosa.power_to_db(S, ref=np.max)
     return S_dB
 
-def get_chroma(y,sr,n_chroma):
-    chroma = np.mean(librosa.feature.chroma_stft(y=y, sr=sr, n_chroma=n_chroma).T, axis=0)
-    return chroma
 def normalize_spectogram(clip): # bring spectograms in the form we want, suitable for ml models
     # Create a MinMaxScaler
     scaler = MinMaxScaler()
@@ -83,29 +82,33 @@ def main_loop(metadata,dict):
     #  dict is a dictionary with all the calc parameters
     # create dataframes
     # read all wav file without resampling
-    dataset = np.zeros(shape=[len(metadata), 4 * dict["sr"]])
-    dataset_mfcc = np.zeros(shape=[len(metadata), dict["n_mfcc"], dict["time_size"]])
-    dataset_melspec = np.zeros(shape=[len(metadata), dict["n_mels"], dict["time_size"]])
+    #dataset = np.zeros(shape=[len(metadata), 4 * dict["sr"]])
+    #dataset_mfcc = np.zeros(shape=[len(metadata), dict["n_mfcc"], dict["time_size"]])
+    #dataset_melspec = np.zeros(shape=[len(metadata), dict["n_mels"], dict["time_size"]])
     # example processing
     i=0
     print(len(metadata))
 
-    df = pd.DataFrame(columns=["slice_file_name","label","labelID","fold", "f_mfcc", "f_melspec"])
+    df = pd.DataFrame(columns=["slice_file_name","label","labelID","fold", "f_mfcc", "f_melspec","f_chroma"])
 
     for i in range(len(metadata)):
         filename = 'sound_datasets/urbansound8k/audio/fold' + str(metadata["fold"][i]) + '/' + metadata["slice_file_name"][i]
         (sig, rate) = librosa.load(filename, sr=None,res_type="kaiser_fast")
         sig_clean = data_preprocess(y=sig,sr=rate,target_sr=dict["sr"],path=filename)
-        dataset[i] = sig_clean
+        #dataset[i] = sig_clean
         # computes the MFCCs
-        dataset_mfcc[i] = get_mfcc(sig_clean,dict["sr"],n_mfcc=dict["n_mfcc"],hop_length=dict["hop_length"],win_length=dict["win_length"],n_fft=dict["n_fft"])
-        dataset_melspec[i] = get_mel_spec(sig_clean,dict["sr"],n_mels=dict["n_mels"],hop_length=dict["hop_length"],n_fft=dict["n_fft"],fmax=dict["fmax"])
-        feature_mfcc = [np.mean(dataset_mfcc[i].T,axis=0)]
-        feature_melspec = [np.mean(dataset_melspec[i].T,axis=0)]
+        mfcc = get_mfcc(sig_clean,dict["sr"],n_mfcc=dict["n_mfcc"],hop_length=dict["hop_length"],win_length=dict["win_length"],n_fft=dict["n_fft"])
+        melspec = get_mel_spec(sig_clean,dict["sr"],n_mels=dict["n_mels"],hop_length=dict["hop_length"],n_fft=dict["n_fft"],fmax=dict["fmax"])
+        chroma_stft = get_chroma_stft(sig_clean,dict["sr"],n_chroma=dict["n_chroma"],hop_length=dict["hop_length"],n_fft=dict["n_fft"])
+        feature_mfcc = [np.mean(mfcc.T,axis=0)]
+        feature_melspec = [np.mean(melspec.T,axis=0)]
+        feature_chroma = [np.mean(chroma_stft.T,axis=0)]
         df = pd.concat([df,pd.DataFrame({"slice_file_name":metadata["slice_file_name"][i],"label":metadata["class"][i],"labelID":metadata["classID"][i],
-                                         "fold":metadata["fold"][i],"f_mfcc":feature_mfcc,"f_melspec":feature_melspec},index=[0])],ignore_index=True)
-        save_array_as_jpeg(dataset_mfcc[i],output_folder_type="mfcc",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
-        save_array_as_jpeg(dataset_melspec[i],output_folder_type="melspec",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
+                                         "fold":metadata["fold"][i],"f_mfcc":feature_mfcc,"f_melspec":feature_melspec,"f_chroma":feature_chroma},index=[0])],ignore_index=True)
+        save_array_as_jpeg(mfcc,output_folder_type="mfcc",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
+        save_array_as_jpeg(melspec,output_folder_type="melspec",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
+        save_array_as_jpeg(chroma_stft, output_folder_type="chroma_stft", fold=metadata["fold"][i],
+                           filename=metadata["slice_file_name"][i])
         print(f"prepared file{i} from {len(metadata)}!")
         i += 1
         if i%30 == 0: #backup
@@ -114,32 +117,27 @@ def main_loop(metadata,dict):
 
 
 
-def process_example(clip_nr,sr=16000):
+def process_example(clip_nr,dict):
     dataset = soundata.initialize(dataset_name='urbansound8k', data_home="sound_datasets/urbansound8k")
     ids = dataset.clip_ids  # the list of urbansound8k's clip ids
     clips = dataset.load_clips()
-    # MFCC parameters
-    n_mfcc = 40
-    hop_length = round(sr * 0.0125)
-    win_length = round(sr * 0.023)
-    mfcc_time_size = 4 * sr // hop_length + 1
-    # MelSpec parameters
-    n_fft = 2 ** 14
-    n_mels = 128
-    fmax = 8000
     example_clip = clips[ids[clip_nr]]  # Get clip
     clip_info = example_clip.slice_file_name
     y, rate = example_clip.audio
     librosa.display.waveshow(y=y,sr=rate)
     plt.show()
     print(clip_info)
-    sig_clean = data_preprocess(y, rate, target_sr=sr)
-    librosa.display.waveshow(y=sig_clean, sr=sr)
+    sig_clean = data_preprocess(y, rate, target_sr=dict["sr"])
+    librosa.display.waveshow(y=sig_clean, sr=dict["sr"])
     plt.show()
-    sig_mfcc = get_mfcc(sig_clean,sr,n_mfcc=n_mfcc,hop_length=hop_length,win_length=win_length,n_fft=n_fft)
-    sig_melspec = get_mel_spec(sig_clean,sr,n_mels=n_mels,hop_length=hop_length,n_fft=n_fft,fmax=fmax)
-    visualize(sig_mfcc,sr,clip_info=clip_info)
-    visualize(sig_melspec,sr,clip_info=clip_info)
+    mfcc = get_mfcc(sig_clean, dict["sr"], n_mfcc=dict["n_mfcc"], hop_length=dict["hop_length"],
+                    win_length=dict["win_length"], n_fft=dict["n_fft"])
+    melspec = get_mel_spec(sig_clean, dict["sr"], n_mels=dict["n_mels"], hop_length=dict["hop_length"],
+                           n_fft=dict["n_fft"], fmax=dict["fmax"])
+    feature_mfcc = [np.mean(mfcc.T, axis=0)]
+    feature_melspec = [np.mean(melspec.T, axis=0)]
+    visualize(mfcc,dict["sr"],clip_info=clip_info)
+    visualize(melspec,dict["sr"],clip_info=clip_info)
 
 
 def save_array_as_jpeg(array, output_folder_type, fold,filename):
@@ -164,18 +162,20 @@ if __name__== "__main__":
     dict = {}
     # MFCC parameters
     dict["sr"]=16000
-    dict["n_mfcc"] = 40
-    dict["hop_length"] = round(dict["sr"] * 0.025)
+    dict["n_mfcc"] = 64
+    dict["hop_length"] = round(dict["sr"] * 0.0125)
     dict["win_length"] = round(dict["sr"] * 0.023)
     dict["time_size"] = 4 * dict["sr"] // dict["hop_length"] + 1
     # MelSpec parameters
     dict["n_fft"] = 2 ** 14
-    dict["n_mels"] = 128
+    dict["n_mels"] = 64
     dict["fmax"] = 8000
+    # Chroma_stft
+    dict["n_chroma"] = 64
 
     # Metadata
     metadata = pd.read_csv('sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
     metadata.head(10)
     print(metadata)
-    #process_example(20,sr)
+    #process_example(20,dict)
     main_loop(metadata,dict)
