@@ -71,9 +71,8 @@ def get_features(S):
     mean = [np.mean(S.T,axis=0)]
     median = [np.median(S.T,axis=0)]
     max = [np.max(S.T,axis=0)]
-    min = [np.min(S.T, axis=0)]
     std = [np.std(S.T, axis=0)]
-    return mean, max, min, median, std
+    return mean, max, median, std
 
 def visualize(S,sr,clip_info):
     fig, ax = plt.subplots()
@@ -87,7 +86,7 @@ def main_loop(metadata,dict):
     #  dict is a dictionary with all the calc parameters
     print("Processing " +str(len(metadata)) + " files")
     # create dataframes
-    df = pd.DataFrame(columns=["slice_file_name","label","labelID","fold", "mean_mfcc", "mean_melspec","max_melspec","max_mfcc","min_melspec","min_mfcc","median_melspec","median_mfcc"])
+    df = pd.DataFrame(columns=["slice_file_name","label","labelID","fold", "mean_mfcc", "mean_melspec","max_melspec","max_mfcc","median_melspec","median_mfcc","std_melspec","std_mfcc"])
 
     for i in tqdm.tqdm(range(len(metadata))):
         filename = 'sound_datasets/urbansound8k/audio/fold' + str(metadata["fold"][i]) + '/' + metadata["slice_file_name"][i]
@@ -97,12 +96,12 @@ def main_loop(metadata,dict):
         mfcc = get_mfcc(sig_clean,dict)
         melspec = get_mel_spec(sig_clean,dict)
         # Turns these to feature vectors
-        mean_mfcc, max_mfcc,min_mfcc,median_mfcc, std_mfcc = get_features(mfcc)
-        mean_melspec, max_melspec, min_melspec, median_melspec, std_melspec = get_features(melspec)
+        mean_mfcc, max_mfcc,median_mfcc, std_mfcc = get_features(mfcc)
+        mean_melspec, max_melspec, median_melspec, std_melspec = get_features(melspec)
         #save features and metadata in pd Dataframe. Also save images of the Melspec and MFCC in folder for image ML
         df = pd.concat([df,pd.DataFrame({"slice_file_name":metadata["slice_file_name"][i],"label":metadata["class"][i],"labelID":metadata["classID"][i],
                                          "fold":metadata["fold"][i],"mean_mfcc":mean_mfcc,"mean_melspec":mean_melspec,"max_melspec":max_melspec,"max_mfcc":max_mfcc,
-                                         "min_melspec":min_melspec,"min_mfcc":min_mfcc,"median_melspec":median_melspec,"median_mfcc":median_mfcc},index=[0])],ignore_index=True)
+                                        "median_melspec":median_melspec,"median_mfcc":median_mfcc, "std_melspec":std_melspec,"std_mfcc":std_mfcc},index=[0])],ignore_index=True)
         save_array(mfcc,output_folder_type="mfcc",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
         save_array(melspec,output_folder_type="melspec",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
         if i%30 == 0: #backup
