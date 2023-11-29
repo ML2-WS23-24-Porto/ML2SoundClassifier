@@ -9,9 +9,7 @@ from sklearn.preprocessing import MinMaxScaler
 import seaborn as sns
 import tqdm
 import os
-import imageio
-import torch
-import scipy
+import skimage
 
 # for downloading the dataset, put the sound dataset in the same folder as the file after downloading
 def download():
@@ -96,8 +94,8 @@ def main_loop(metadata,dict):
         (sig, rate) = librosa.load(filename, sr=None,res_type="kaiser_fast")
         sig_clean = data_preprocess(y=sig,sr=rate,target_sr=dict["sr"],path=filename)
         # computes the MFCCs and Melspecs
-        mfcc = scale_minmax(get_mfcc(sig_clean,dict))
-        melspec = scale_minmax(get_mel_spec(sig_clean,dict))
+        mfcc = get_mfcc(sig_clean,dict)
+        melspec = get_mel_spec(sig_clean,dict)
         # Turns these to feature vectors
         mean_mfcc, max_mfcc,min_mfcc,median_mfcc, std_mfcc = get_features(mfcc)
         mean_melspec, max_melspec, min_melspec, median_melspec, std_melspec = get_features(melspec)
@@ -105,8 +103,8 @@ def main_loop(metadata,dict):
         df = pd.concat([df,pd.DataFrame({"slice_file_name":metadata["slice_file_name"][i],"label":metadata["class"][i],"labelID":metadata["classID"][i],
                                          "fold":metadata["fold"][i],"mean_mfcc":mean_mfcc,"mean_melspec":mean_melspec,"max_melspec":max_melspec,"max_mfcc":max_mfcc,
                                          "min_melspec":min_melspec,"min_mfcc":min_mfcc,"median_melspec":median_melspec,"median_mfcc":median_mfcc},index=[0])],ignore_index=True)
-        save_array_as_txt(mfcc,output_folder_type="mfcc",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
-        save_array_as_txt(melspec,output_folder_type="melspec",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
+        save_array(mfcc,output_folder_type="mfcc",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
+        save_array(melspec,output_folder_type="melspec",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
         if i%30 == 0: #backup
             df.to_csv("processed_data.csv", index=False)
     df.to_csv("processed_data.csv", index=False)
@@ -142,19 +140,20 @@ def process_example(clip_nr,dict):
     #visualize(chroma_stft,dict["sr"],clip_info=clip_info)
 
 
-def save_array_as_txt(array, output_folder_type, fold,filename):
+def save_array(array, output_folder_type, fold,filename):
     dir = "sound_datasets/urbansound8k/" + str(output_folder_type) + "/fold" + str(fold)
     # Ensure the array values are in the valid range for an image (0 to 255)
-    img = scale_minmax(array, 0, 1).astype(np.float32)
+    img = scale_minmax(array, 0, 255).astype(np.uint8)
+    img = np.flip(img, axis=0)  # put low frequencies at the bottom in image
+    img = 255 - img  # invert. make black==more energy
     # Create the output folder if it doesn't exist
     os.makedirs(dir, exist_ok=True)
-    # Replace '.wav' with '.jpeg'
-    filename = filename.replace(".wav", ".txt")
+    # Replace '.wav' with '.png'
+    filename = filename.replace(".wav", ".png")
     # Construct the full path for saving the JPEG file in the 'melspec' folder
     full_path = os.path.join(dir, filename)
-    # Save the array as a JPEG image
-    np.savetxt(full_path,img)
-
+    # Save the array as a PNG image
+    skimage.io.imsave(full_path, img)
 
 
 # main loop for data prep:
@@ -162,13 +161,13 @@ if __name__== "__main__":
     dict = {}
     # MFCC parameters
     dict["sr"]= 2**14
-    dict["n_mfcc"] = 32
+    dict["n_mfcc"] = 36
     dict["hop_length"] = round(dict["sr"] * 0.0125)
     dict["win_length"] = round(dict["sr"] * 0.023)
     dict["time_size"] = 4 * dict["sr"] // dict["hop_length"] + 1
     # MelSpec parameters
     dict["n_fft"] = 2 ** 14 # Window length of fft
-    dict["n_mels"] = 32
+    dict["n_mels"] = 36
     dict["fmax"] = 2**13
 
 
