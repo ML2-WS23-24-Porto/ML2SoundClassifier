@@ -156,6 +156,7 @@ def save_array(array, output_folder_type, fold,filename):
     skimage.io.imsave(full_path, img)
 
 
+
 # main loop for data prep:
 if __name__== "__main__":
     dict = {}
