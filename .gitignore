@@ -36,3 +36,4 @@ tuner_dir_fold_4/project_fold_4/trial_0/checkpoint
 tuner_dir_fold_4/project_fold_4/trial_1/checkpoint
 tuner_dir_fold_4/project_fold_4/trial_2/checkpoint
 tuner_dir_fold_4/project_fold_4/trial_3/checkpoint
+*.png

@@ -36,6 +36,7 @@ from tensorflow.keras.layers import (
     Activation,
 )
 
+tensorflow.keras.backend.clear_session()
 
 #class for plotting
 class PlotLearning(keras.callbacks.Callback):
@@ -77,7 +78,7 @@ def normalize(clip):
     return normalized_clip
 
 def conv_array(root_folder):
-    metadata = pd.read_csv('sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
+    metadata = pd.read_csv('sound_datasets/urbansound8k/processed_data.csv')
     folds = {}
     for class_label in range(1, 11):
         class_folder_path = os.path.join(root_folder, f"fold{class_label}")
@@ -86,15 +87,21 @@ def conv_array(root_folder):
         if not os.path.exists(class_folder_path):
             continue  # Skip if the folder doesn't exist
         for filename in os.listdir(class_folder_path):
-            if filename.endswith(".jpeg"):
+            if filename.endswith(".png"):
                 image_path = os.path.join(class_folder_path, filename)
                 image = Image.open(image_path)
-                image_array = np.array(image)
-                image_array = normalize(image_array)
-                new_filename = filename.replace('.jpeg', '.wav')
+                new_filename = filename.replace('.png', '.wav')
                 row_num = metadata[metadata['slice_file_name'] == new_filename].index
-                all_labels.append(metadata.iloc[row_num]['classID'])
-                image_data.append(image_array)
+                if not row_num.empty:
+                    image_array = np.array(image)
+                    image_array = normalize(image_array)
+                    image_array = image_array.reshape((36, 320, 1))
+                    label = metadata.iloc[row_num]['labelID'].values[0]
+                    all_labels.append(label)
+                    image_data.append(image_array)
+                else:
+                    print(f'{new_filename} not found')
+                    continue
         image_data = np.array(image_data)
         all_labels = np.array(all_labels)
         all_labels = to_categorical(all_labels - 1, num_classes=10)
@@ -103,16 +110,19 @@ def conv_array(root_folder):
 
 
 metadata = pd.read_csv('sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
-root_folder = r"C:\Users\Diederik\OneDrive\Bureaublad\studie tn\Minor vakken Porto\Machine Learning\Coding\sound_datasets - Copy\urbansound8k\melspec"
+root_folder = r"sound_datasets/urbansound8k/melspec"
 data = conv_array(root_folder)
+input_shape = data['fold1'][0].shape
+print(input_shape)
+
 #X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=42)
 metric = 'accuracy' #evaluation metric
 #metric = tensorflow.keras.metrics.MeanAveragePrecisionMetric(topn=2)
 loss= 'categorical_crossentropy' #loss function
 
 #training parameters
-num_epoch = 1
-batch_size =128
+num_epoch = 5
+batch_size =256
 early_stop = 3 # early stoppping after 3 epochs with no improvement of test data
 
 #objective to specify the objective to select the best models, and we use max_trials to specify the number of different models to try.
@@ -120,15 +130,9 @@ objective='val_loss'
 max_trials = 8 # how many model variations to test?
 max_trial_retrys = 3 # how many trials per variation? (same model could perform differently)
 
-metadata = pd.read_csv('sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
 # metadata.head(10)
 # sns.countplot(metadata, y="class")
 #plt.show()
-input = data['fold1']
-input = input[0]
-input = input[0]
-print(input.shape[:-1])
-print(input)
 
 #Building a hypermodel:
 # function to build a hypermodel
@@ -181,7 +185,7 @@ def model_k_cross(hyperparameters, data):
         hp.Fixed(key, value)
 
     for fold_name, fold_data in data.items():
-        print(f"Training on {fold_name}")
+        print(f"Training using {fold_name} as validation")
         X_val, y_val = fold_data[0], fold_data[1]
         X_train = []
         y_train = []
@@ -209,17 +213,21 @@ def model_k_cross(hyperparameters, data):
         # Evaluation
         scores = cmodel.evaluate(X_val, y_val)
         print("Validation accuracy:", scores[1])
-        list_scores.append(scores)
+        list_scores.append(scores[1])
+        average_acc = sum(list_scores)/len(list_scores)
 
         # Plot training history
         print(history.history.keys())
         plt.plot(history.history['loss'])
         plt.plot(history.history['val_loss'])
-        plt.title(f"Training Loss - Fold {fold_name}")
+        plt.title(f"Training Loss - Fold {fold_name} as validation")
         plt.ylabel('Loss')
         plt.xlabel('Epoch')
         plt.legend(['Training Loss', 'Validation Loss'], loc='upper left')
         plt.show()
+
+    print(f'List of scores{list_scores}')
+    print(f'Average accuracy: {average_acc}')
 
 
 
