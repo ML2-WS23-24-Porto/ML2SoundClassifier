@@ -71,13 +71,11 @@ def scale_minmax(X, min=0.0, max=1.0):
 
 def get_features(S):
     mean = [np.mean(S.T,axis=0)]
-    std = [np.std(S.T,axis=0)]
     median = [np.median(S.T,axis=0)]
     max = [np.max(S.T,axis=0)]
     min = [np.min(S.T, axis=0)]
-    skew = [scipy.stats.skew(S.T,axis=0)]
-    kurt = [scipy.stats.kurtosis(S.T,axis=0)]
-    return mean,std, max, min, median, skew, kurt
+    std = [np.std(S.T, axis=0)]
+    return mean, max, min, median, std
 
 def visualize(S,sr,clip_info):
     fig, ax = plt.subplots()
@@ -91,28 +89,28 @@ def main_loop(metadata,dict):
     #  dict is a dictionary with all the calc parameters
     print("Processing " +str(len(metadata)) + " files")
     # create dataframes
-    df = pd.DataFrame(columns=["slice_file_name","label","labelID","fold", "mean_mfcc", "mean_melspec","std_melspec","std_mfcc","max_melspec","max_mfcc","min_melspec","min_mfcc","median_melspec","median_mfcc","skew_melspec","skew_mfcc","kurtosis_melspec","kurtosis_mfcc"])
+    df = pd.DataFrame(columns=["slice_file_name","label","labelID","fold", "mean_mfcc", "mean_melspec","max_melspec","max_mfcc","min_melspec","min_mfcc","median_melspec","median_mfcc"])
 
     for i in tqdm.tqdm(range(len(metadata))):
         filename = 'sound_datasets/urbansound8k/audio/fold' + str(metadata["fold"][i]) + '/' + metadata["slice_file_name"][i]
         (sig, rate) = librosa.load(filename, sr=None,res_type="kaiser_fast")
         sig_clean = data_preprocess(y=sig,sr=rate,target_sr=dict["sr"],path=filename)
         # computes the MFCCs and Melspecs
-        mfcc = get_mfcc(sig_clean,dict)
-        melspec = get_mel_spec(sig_clean,dict)
+        mfcc = scale_minmax(get_mfcc(sig_clean,dict))
+        melspec = scale_minmax(get_mel_spec(sig_clean,dict))
         # Turns these to feature vectors
-        mean_mfcc,std_mfcc, max_mfcc,min_mfcc,median_mfcc,skew_mfcc,kurtosis_mfcc = get_features(mfcc)
-        mean_melspec,std_melspec, max_melspec, min_melspec, median_melspec, skew_melspec, kurtosis_melspec = get_features(melspec)
+        mean_mfcc, max_mfcc,min_mfcc,median_mfcc, std_mfcc = get_features(mfcc)
+        mean_melspec, max_melspec, min_melspec, median_melspec, std_melspec = get_features(melspec)
         #save features and metadata in pd Dataframe. Also save images of the Melspec and MFCC in folder for image ML
         df = pd.concat([df,pd.DataFrame({"slice_file_name":metadata["slice_file_name"][i],"label":metadata["class"][i],"labelID":metadata["classID"][i],
                                          "fold":metadata["fold"][i],"mean_mfcc":mean_mfcc,"mean_melspec":mean_melspec,"max_melspec":max_melspec,"max_mfcc":max_mfcc,
-                                         "min_melspec":min_melspec,"min_mfcc":min_mfcc,"median_melspec":median_melspec,"median_mfcc":median_mfcc,"skew_melspec":skew_melspec,
-                                         "skew_mfcc":skew_mfcc,"kurtosis_melspec":kurtosis_melspec,"kurtosis_mfcc":kurtosis_mfcc},index=[0])],ignore_index=True)
-        save_array_as_jpeg(mfcc,output_folder_type="mfcc",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
-        save_array_as_jpeg(melspec,output_folder_type="melspec",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
+                                         "min_melspec":min_melspec,"min_mfcc":min_mfcc,"median_melspec":median_melspec,"median_mfcc":median_mfcc},index=[0])],ignore_index=True)
+        save_array_as_txt(mfcc,output_folder_type="mfcc",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
+        save_array_as_txt(melspec,output_folder_type="melspec",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
         if i%30 == 0: #backup
             df.to_csv("processed_data.csv", index=False)
     df.to_csv("processed_data.csv", index=False)
+
 
 
 
@@ -131,29 +129,31 @@ def process_example(clip_nr,dict):
     plt.show()
     mfcc = get_mfcc(sig_clean, dict)
     melspec = get_mel_spec(sig_clean, dict)
+    print(melspec)
     # we tried using the chromagram for features but it didn't work well
     #chroma_stft = get_chroma_stft(sig_clean, dict)
     feature_mfcc = [np.mean(mfcc.T, axis=0)]
     feature_melspec = [np.mean(melspec.T, axis=0)]
     visualize(mfcc,dict["sr"],clip_info=clip_info)
     visualize(melspec,dict["sr"],clip_info=clip_info)
+    img = scale_minmax(mfcc, 0, 1).astype(np.float32)
+    img = np.flip(img, axis=0)
+    print(img)
     #visualize(chroma_stft,dict["sr"],clip_info=clip_info)
 
 
-def save_array_as_jpeg(array, output_folder_type, fold,filename):
+def save_array_as_txt(array, output_folder_type, fold,filename):
     dir = "sound_datasets/urbansound8k/" + str(output_folder_type) + "/fold" + str(fold)
     # Ensure the array values are in the valid range for an image (0 to 255)
-    img = scale_minmax(array, 0, 255).astype(np.uint8)
-    img = np.flip(img, axis=0)  # put low frequencies at the bottom in image
-    img = 255 - img  # invert. make black==more energy
+    img = scale_minmax(array, 0, 1).astype(np.float32)
     # Create the output folder if it doesn't exist
     os.makedirs(dir, exist_ok=True)
     # Replace '.wav' with '.jpeg'
-    filename = filename.replace(".wav", ".jpeg")
+    filename = filename.replace(".wav", ".txt")
     # Construct the full path for saving the JPEG file in the 'melspec' folder
     full_path = os.path.join(dir, filename)
     # Save the array as a JPEG image
-    matplotlib.image.imsave(full_path, img)
+    np.savetxt(full_path,img)
 
 
 
@@ -162,16 +162,14 @@ if __name__== "__main__":
     dict = {}
     # MFCC parameters
     dict["sr"]= 2**14
-    dict["n_mfcc"] = 40
+    dict["n_mfcc"] = 32
     dict["hop_length"] = round(dict["sr"] * 0.0125)
     dict["win_length"] = round(dict["sr"] * 0.023)
     dict["time_size"] = 4 * dict["sr"] // dict["hop_length"] + 1
     # MelSpec parameters
     dict["n_fft"] = 2 ** 14 # Window length of fft
-    dict["n_mels"] = 40
+    dict["n_mels"] = 32
     dict["fmax"] = 2**13
-    # Chroma_stft
-    dict["n_chroma"] = 40
 
 
     # Metadata
