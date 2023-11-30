@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import tqdm
 import pandas as pd
 import time, warnings
 import seaborn as sns
@@ -13,6 +14,12 @@ from keras_tuner.tuners import RandomSearch
 from keras_tuner.engine.trial import Trial
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import LeaveOneGroupOut, StratifiedKFold, GridSearchCV
+from sklearn.pipeline import Pipeline
+from sklearn.metrics import accuracy_score, classification_report, f1_score
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+import numpy as np
+import random
 import keras_tuner as kt
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.utils import to_categorical
@@ -29,7 +36,6 @@ from tensorflow.keras.layers import (
     MaxPool2D,
     Activation,
 )
-
 
 #class for plotting
 class PlotLearning(keras.callbacks.Callback):
@@ -71,46 +77,60 @@ def normalize(clip):
     return normalized_clip
 
 def conv_array(root_folder):
-    image_data = []
-    all_labels = []
+    metadata = pd.read_csv('/content/drive/MyDrive/UrbanSound8kv2/Data_extracted/processed_data.csv')
+    folds = {}
     for class_label in range(1, 11):
         class_folder_path = os.path.join(root_folder, f"fold{class_label}")
+        image_data = []
+        all_labels = []
         if not os.path.exists(class_folder_path):
             continue  # Skip if the folder doesn't exist
-        for filename in os.listdir(class_folder_path):
-            if filename.endswith(".jpeg"):
+        for filename in tqdm.tqdm(os.listdir(class_folder_path)):
+            if filename.endswith(".png"):
                 image_path = os.path.join(class_folder_path, filename)
                 image = Image.open(image_path)
-                image_array = np.array(image)
-                image_array = normalize(image_array)
-                all_labels.append(class_label)
-                image_data.append(image_array)
+                new_filename = filename.replace('.png', '.wav')
+                row_num = metadata[metadata['slice_file_name'] == new_filename].index
+                if not row_num.empty:
+                    image_array = np.array(image)
+                    if not image_array.shape == (36, 320):
+                      continue
+                    image_array = normalize(image_array)
+                    reshape_size = image_array.shape + (1,)
+                    image_array = image_array.reshape(reshape_size)
+                    label = metadata.iloc[row_num]['labelID'].values[0]
+                    all_labels.append(label)
+                    image_data.append(image_array)
+                else:
+                    print(f'{new_filename} not found')
+                    continue
+        image_data = np.array(image_data)
+        all_labels = np.array(all_labels)
+        all_labels = to_categorical(all_labels - 1, num_classes=10)
+        folds[f"fold{class_label}"] = [image_data, all_labels]
+    return folds
 
-    image_data = np.array(image_data)
-    all_labels = np.array(all_labels)
-    all_labels = to_categorical(all_labels - 1, num_classes=10)
-    return image_data, all_labels
 
-root_folder = r"C:\Users\Diederik\OneDrive\Bureaublad\studie tn\Minor vakken Porto\Machine Learning\Coding\sound_datasets - Copy\urbansound8k\melspec"
-X, y = conv_array(root_folder)
-print(X.shape)
-print(y.shape)
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=42)
+root_folder = r"/content/drive/MyDrive/UrbanSound8kv2/Data_extracted/melspec"
+data = conv_array(root_folder)
+input_shape = data['fold1'][0].shape
+print(input_shape)
+
+tensorflow.keras.backend.clear_session()
 metric = 'accuracy' #evaluation metric
 #metric = tensorflow.keras.metrics.MeanAveragePrecisionMetric(topn=2)
 loss= 'categorical_crossentropy' #loss function
 
 #training parameters
-num_epoch = 20
+num_epoch = 30
 batch_size =128
-early_stop = 3 # early stoppping after 3 epochs with no improvement of test data
+early_stop = 5 # early stoppping after 3 epochs with no improvement of test data
 
 #objective to specify the objective to select the best models, and we use max_trials to specify the number of different models to try.
 objective='val_loss'
 max_trials = 8 # how many model variations to test?
 max_trial_retrys = 3 # how many trials per variation? (same model could perform differently)
 
-# metadata = pd.read_csv('sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
 # metadata.head(10)
 # sns.countplot(metadata, y="class")
 #plt.show()
@@ -120,8 +140,9 @@ max_trial_retrys = 3 # how many trials per variation? (same model could perform 
 # takes an argument from which to sample hyperparameters
 def build_model(hp):
     model = Sequential()
-
-    model.add(Conv2D(hp.Int('input_units', min_value=32, max_value=256, step=32), (3, 3), input_shape=X.shape[1:]))
+    input = data['fold1']
+    input = input[0]
+    model.add(Conv2D(hp.Int('input_units', min_value=32, max_value=256, step=32), (3, 3), input_shape=input.shape[1:]))
     model.add(Activation('tanh'))
     model.add(MaxPool2D(pool_size=(2, 2)))
 
@@ -147,48 +168,6 @@ def build_model(hp):
 
     return model
 
-
-#10 Fold cross validation to obtain best hyperparameters
-def tuner_k_cross(X, y, num_epoch, batch_size):
-    kf = KFold(n_splits=10, shuffle=True, random_state=42)
-
-    best_hyperparameters_per_fold = []
-    total_hyperparameters = {
-        'input_units': 0,
-        'n_layers': 0,
-        'conv_0_units': 0,
-        'rate': 0,
-        'n_connections': 0,
-        'n_nodes': 0
-    }
-
-    for fold, (train_index, val_index) in enumerate(kf.split(X)):
-        print(f"Training on fold {fold + 1}")
-        X_train, X_val = X[train_index], X[val_index]
-        y_train, y_val = y[train_index], y[val_index]
-
-        EarlyStoppingCallback = tensorflow.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
-        tuner = RandomSearch(build_model, objective=objective, max_trials=max_trials, executions_per_trial=max_trial_retrys,
-                             #directory=f'tuner_dir_fold_{fold}', project_name=f'project_fold_{fold}',
-                             metrics=[metric])
-        tuner.search(x=X_train, y=y_train, epochs=num_epoch, batch_size=batch_size,
-                     validation_data=(X_val, y_val), callbacks=[EarlyStoppingCallback])
-
-        best_hyperparameters = tuner.oracle.get_best_trials(1)[0].hyperparameters.values
-        best_hyperparameters_per_fold.append(best_hyperparameters)
-
-    for fold_hyperparameters in best_hyperparameters_per_fold:
-        for key, value in fold_hyperparameters.items():
-            total_hyperparameters[key] += value
-
-    # Calculate the average hyperparameter values
-    num_folds = len(best_hyperparameters_per_fold)
-    average_hyperparameters = {key: value / num_folds for key, value in total_hyperparameters.items()}
-
-    return best_hyperparameters_per_fold, average_hyperparameters
-
-#best_hyperparameters_per_fold, best_hyperparameters_overall = tuner_k_cross(X, y, num_epoch, batch_size)
-
 #get optimal hyperparameters using
 def tuner(X, y, num_epoch, batch_size):
     EarlyStoppingCallback = tensorflow.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
@@ -197,44 +176,72 @@ def tuner(X, y, num_epoch, batch_size):
     best_hyperparameters = tuner.oracle.get_best_trials(1)[0].hyperparameters.values
     return best_hyperparameters
 
-hyperparameters2 = tuner(X, y, num_epoch, batch_size)
-print(hyperparameters2)
+#hyperparameters2 = tuner(X, y, num_epoch, batch_size)
+#print(hyperparameters2)
 
-def model_k_cross(hyperparameters, X, y):
-    kf = KFold(n_splits=10, shuffle=True)
+def model_k_cross(hyperparameters, data):
     hp = kt.HyperParameters()
+    list_scores = []
     for key, value in hyperparameters.items():
         hp.Fixed(key, value)
 
-    # Merge inputs and targets
-    inputs = np.concatenate((X_train, X_test), axis=0)
-    targets = np.concatenate((y_train, y_test), axis=0)
+    for fold_name, fold_data in tqdm.tqdm(data.items()):
+        tensorflow.keras.backend.clear_session()
+        print(f"Training using {fold_name} as validation")
+        X_val, y_val = fold_data[0], fold_data[1]
+        X_train = []
+        y_train = []
 
-    fold_no =1
-    for train, test in kf.split(X, y):
+        for other_fold_name, other_fold_data in data.items():
+            if other_fold_name == fold_name:
+                continue
+
+            X = other_fold_data[0]
+            y = other_fold_data[1]
+            X_train.extend(X)
+            y_train.extend(y)
+
+        X_train = np.array(X_train)
+        y_train = np.array(y_train)
+
         cmodel = build_model(hp)
+        cmodel.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
         EarlyStoppingCallback = tensorflow.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
 
-        print('------------------------------------------------------------------------')
-        print(f'Training for fold {fold_no} ...')
-        cmodel.fit(inputs[train], targets[train], epochs=num_epoch, batch_size=batch_size,
-                   callbacks=[EarlyStoppingCallback, PlotLearning()], validation_split=0.1)
-        cmodel.summary()
+        history = cmodel.fit(X_train, y_train, epochs=num_epoch, batch_size=batch_size,
+                   callbacks=[EarlyStoppingCallback], validation_data=(X_val, y_val))
 
-        # evaluation
-        history = cmodel.evaluate(X_test, y_test)  # Use X_test and y_test for evaluation
-        scores = cmodel.evaluate(X_test, y_test)
-        print("Test accuracy:", scores[1])
+        # Evaluation
+        scores = cmodel.evaluate(X_val, y_val)
+        print("Validation accuracy:", scores[1])
+        list_scores.append(scores[1])
 
-        # Plot training history
-        print(history.keys())
-        plt.plot(history['val_loss'])  # Add validation loss if available
-        plt.title("Training Loss")
+
+        # Plot training history - loss
+        print(history.history.keys())
+        plt.plot(history.history['loss'])
+        plt.plot(history.history['val_loss'])
+        plt.title(f"Training Loss - {fold_name} as validation")
         plt.ylabel('Loss')
         plt.xlabel('Epoch')
         plt.legend(['Training Loss', 'Validation Loss'], loc='upper left')
         plt.show()
-        fold_no += 1
+
+        plt.plot(history.history['accuracy'])
+        plt.plot(history.history['val_accuracy'])
+        plt.title(f"Accuracy - {fold_name} as validation")
+        plt.ylabel('Loss')
+        plt.xlabel('Epoch')
+        plt.legend(['Training accuracy', 'Validation Loss'], loc='upper left')
+        plt.show()
+
+
+    average_acc = sum(list_scores) / len(list_scores)
+    print(f'List of scores{list_scores}')
+    print(f'Average accuracy: {average_acc}')
+
+
 
 
 #creating custom hyperparameters to inspect model performance,inspired by the network we found on kaggle
@@ -248,7 +255,5 @@ custom_hyperparameters = {
         'conv_1_units': 128,
     }
 
-model_k_cross(custom_hyperparameters, X, y)
+model_k_cross(custom_hyperparameters, data)
 #model(best_hyperparameters_overall)
-
-
