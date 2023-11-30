@@ -178,7 +178,6 @@ def tuner(X, y, num_epoch, batch_size):
 
 #hyperparameters2 = tuner(X, y, num_epoch, batch_size)
 #print(hyperparameters2)
-
 def model_k_cross(hyperparameters, data):
     hp = kt.HyperParameters()
     list_scores = []

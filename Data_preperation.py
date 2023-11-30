@@ -41,13 +41,13 @@ def add_noise(sound_clip):
 # Here we extract the different spectograms
 def get_mfcc(y,dict): # this function gets the mfcc
     # computes the MFCCs
-    S = librosa.feature.mfcc(y=y,sr=dict["sr"],n_mfcc=dict["n_mfcc"],hop_length=dict["hop_length"],win_length=dict["win_length"],n_fft=dict["n_fft"])
+    S = librosa.feature.mfcc(y=y,sr=dict["sr"],n_mfcc=dict["n_mfcc"], hop_length=dict["hop_length"],n_fft=dict["n_fft"],win_length = dict["win_length"])
     return S
 def get_chroma_stft(y,dict):
     chroma_stft = librosa.feature.chroma_stft(y=y, sr=dict["sr"], n_chroma=dict["n_chroma"], hop_length=dict["hop_length"],n_fft=dict["n_fft"])
     return chroma_stft
 def get_mel_spec(y,dict): # this function gets the mel spectogram
-    S = librosa.feature.melspectrogram(y=y, sr=dict["sr"],n_mels=dict["n_mels"],hop_length=dict["hop_length"],n_fft=dict["n_fft"],fmax=dict["fmax"])
+    S = librosa.feature.melspectrogram(y=y, sr=dict["sr"],n_mels=dict["n_mels"], hop_length=dict["hop_length"],n_fft=dict["n_fft"],win_length = dict["win_length"])
     S_dB = librosa.power_to_db(S, ref=np.max)
     return S_dB
 
@@ -160,15 +160,15 @@ def save_array(array, output_folder_type, fold,filename):
 if __name__== "__main__":
     dict = {}
     # MFCC parameters
-    dict["sr"]= 2**14
+    dict["sr"] = 44100
     dict["n_mfcc"] = 36
-    dict["hop_length"] = round(dict["sr"] * 0.0125)
+    dict["hop_length"] = round(dict["sr"] * 0.125)
     dict["win_length"] = round(dict["sr"] * 0.023)
-    dict["time_size"] = 4 * dict["sr"] // dict["hop_length"] + 1
+    dict["time_size"] = round(4 * dict["sr"] // dict["hop_length"]) + 1
     # MelSpec parameters
-    dict["n_fft"] = 2 ** 14 # Window length of fft
-    dict["n_mels"] = 36
-    dict["fmax"] = 2**13
+    dict["n_fft"] = 2**14# Window length of fft
+    dict["n_mels"] = 40
+    dict["fmax"] = round(dict["sr"]/2)
 
 
     # Metadata
