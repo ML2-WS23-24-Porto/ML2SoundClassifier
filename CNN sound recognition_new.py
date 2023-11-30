@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import tqdm
 import pandas as pd
 import time, warnings
 import seaborn as sns
@@ -35,8 +36,6 @@ from tensorflow.keras.layers import (
     MaxPool2D,
     Activation,
 )
-
-tensorflow.keras.backend.clear_session()
 
 #class for plotting
 class PlotLearning(keras.callbacks.Callback):
@@ -78,7 +77,7 @@ def normalize(clip):
     return normalized_clip
 
 def conv_array(root_folder):
-    metadata = pd.read_csv('sound_datasets/urbansound8k/processed_data.csv')
+    metadata = pd.read_csv('/content/drive/MyDrive/UrbanSound8kv2/Data_extracted/processed_data.csv')
     folds = {}
     for class_label in range(1, 11):
         class_folder_path = os.path.join(root_folder, f"fold{class_label}")
@@ -86,7 +85,7 @@ def conv_array(root_folder):
         all_labels = []
         if not os.path.exists(class_folder_path):
             continue  # Skip if the folder doesn't exist
-        for filename in os.listdir(class_folder_path):
+        for filename in tqdm.tqdm(os.listdir(class_folder_path)):
             if filename.endswith(".png"):
                 image_path = os.path.join(class_folder_path, filename)
                 image = Image.open(image_path)
@@ -94,8 +93,11 @@ def conv_array(root_folder):
                 row_num = metadata[metadata['slice_file_name'] == new_filename].index
                 if not row_num.empty:
                     image_array = np.array(image)
+                    if not image_array.shape == (36, 320):
+                      continue
                     image_array = normalize(image_array)
-                    image_array = image_array.reshape((36, 320, 1))
+                    reshape_size = image_array.shape + (1,)
+                    image_array = image_array.reshape(reshape_size)
                     label = metadata.iloc[row_num]['labelID'].values[0]
                     all_labels.append(label)
                     image_data.append(image_array)
@@ -109,21 +111,20 @@ def conv_array(root_folder):
     return folds
 
 
-metadata = pd.read_csv('sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
-root_folder = r"sound_datasets/urbansound8k/melspec"
+root_folder = r"/content/drive/MyDrive/UrbanSound8kv2/Data_extracted/melspec"
 data = conv_array(root_folder)
 input_shape = data['fold1'][0].shape
 print(input_shape)
 
-#X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=42)
+tensorflow.keras.backend.clear_session()
 metric = 'accuracy' #evaluation metric
 #metric = tensorflow.keras.metrics.MeanAveragePrecisionMetric(topn=2)
 loss= 'categorical_crossentropy' #loss function
 
 #training parameters
-num_epoch = 5
-batch_size =256
-early_stop = 3 # early stoppping after 3 epochs with no improvement of test data
+num_epoch = 30
+batch_size =128
+early_stop = 5 # early stoppping after 3 epochs with no improvement of test data
 
 #objective to specify the objective to select the best models, and we use max_trials to specify the number of different models to try.
 objective='val_loss'
@@ -184,7 +185,8 @@ def model_k_cross(hyperparameters, data):
     for key, value in hyperparameters.items():
         hp.Fixed(key, value)
 
-    for fold_name, fold_data in data.items():
+    for fold_name, fold_data in tqdm.tqdm(data.items()):
+        tensorflow.keras.backend.clear_session()
         print(f"Training using {fold_name} as validation")
         X_val, y_val = fold_data[0], fold_data[1]
         X_train = []
@@ -208,7 +210,7 @@ def model_k_cross(hyperparameters, data):
         EarlyStoppingCallback = tensorflow.keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop)
 
         history = cmodel.fit(X_train, y_train, epochs=num_epoch, batch_size=batch_size,
-                   callbacks=[EarlyStoppingCallback, PlotLearning()], validation_data=(X_val, y_val))
+                   callbacks=[EarlyStoppingCallback], validation_data=(X_val, y_val))
 
         # Evaluation
         scores = cmodel.evaluate(X_val, y_val)
@@ -216,15 +218,24 @@ def model_k_cross(hyperparameters, data):
         list_scores.append(scores[1])
 
 
-        # Plot training history
+        # Plot training history - loss
         print(history.history.keys())
         plt.plot(history.history['loss'])
         plt.plot(history.history['val_loss'])
-        plt.title(f"Training Loss - Fold {fold_name} as validation")
+        plt.title(f"Training Loss - {fold_name} as validation")
         plt.ylabel('Loss')
         plt.xlabel('Epoch')
         plt.legend(['Training Loss', 'Validation Loss'], loc='upper left')
         plt.show()
+
+        plt.plot(history.history['accuracy'])
+        plt.plot(history.history['val_accuracy'])
+        plt.title(f"Accuracy - {fold_name} as validation")
+        plt.ylabel('Loss')
+        plt.xlabel('Epoch')
+        plt.legend(['Training accuracy', 'Validation Loss'], loc='upper left')
+        plt.show()
+
 
     average_acc = sum(list_scores) / len(list_scores)
     print(f'List of scores{list_scores}')
@@ -246,5 +257,3 @@ custom_hyperparameters = {
 
 model_k_cross(custom_hyperparameters, data)
 #model(best_hyperparameters_overall)
-
-
