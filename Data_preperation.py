@@ -104,6 +104,7 @@ def main_loop(metadata,dict):
                                         "median_melspec":median_melspec,"median_mfcc":median_mfcc, "std_melspec":std_melspec,"std_mfcc":std_mfcc},index=[0])],ignore_index=True)
         save_array(mfcc,output_folder_type="mfcc",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
         save_array(melspec,output_folder_type="melspec",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
+        put_together_save(melspec,mfcc,output_folder_type="both",fold=metadata["fold"][i],filename=metadata["slice_file_name"][i])
         if i%30 == 0: #backup
             df.to_csv("processed_data.csv", index=False)
     df.to_csv("processed_data.csv", index=False)
@@ -153,6 +154,25 @@ def save_array(array, output_folder_type, fold,filename):
     full_path = os.path.join(dir, filename)
     # Save the array as a PNG image
     skimage.io.imsave(full_path, img)
+
+def put_together_save(array1,array2, output_folder_type, fold,filename):
+    dir = "sound_datasets/urbansound8k/" + str(output_folder_type) + "/fold" + str(fold)
+    # Ensure the array values are in the valid range for an image (0 to 255)
+    img1 = scale_minmax(array1, 0, 255).astype(np.uint8)
+    img1 = np.flip(img1, axis=0)  # put low frequencies at the bottom in image
+    img1 = 255 - img1  # invert. make black==more energy
+    img2 = scale_minmax(array2, 0, 255).astype(np.uint8)
+    img2 = np.flip(img2, axis=0)  # put low frequencies at the bottom in image
+    img2 = 255 - img2  # invert. make black==more energy
+    # Create the output folder if it doesn't exist
+    img_both = np.vstack((img1, img2))
+    os.makedirs(dir, exist_ok=True)
+    # Replace '.wav' with '.png'
+    filename = filename.replace(".wav", ".png")
+    # Construct the full path for saving the JPEG file in the 'melspec' folder
+    full_path = os.path.join(dir, filename)
+    # Save the array as a PNG image
+    skimage.io.imsave(full_path, img_both)
 
 
 
