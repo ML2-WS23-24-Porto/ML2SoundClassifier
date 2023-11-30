@@ -214,7 +214,7 @@ def model_k_cross(hyperparameters, data):
         scores = cmodel.evaluate(X_val, y_val)
         print("Validation accuracy:", scores[1])
         list_scores.append(scores[1])
-        average_acc = sum(list_scores)/len(list_scores)
+
 
         # Plot training history
         print(history.history.keys())
@@ -226,6 +226,7 @@ def model_k_cross(hyperparameters, data):
         plt.legend(['Training Loss', 'Validation Loss'], loc='upper left')
         plt.show()
 
+    average_acc = sum(list_scores) / len(list_scores)
     print(f'List of scores{list_scores}')
     print(f'Average accuracy: {average_acc}')
 
