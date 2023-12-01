@@ -17,16 +17,16 @@ def download():
     dataset.download()  # download the dataset
     dataset.validate()  # validate that all the expected files are there
 
-def data_preprocess(y,sr,target_sr = 16000,path = None): #here we should perform noise reduction , zero padding and resampling,...?
+def data_preprocess(y,sr,target_sr = 16000): #here we should perform noise reduction , zero padding and resampling,...?
     y_resampled = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
     # zero padding, duplicating sound
-    if 4 * target_sr//len(y_resampled) >1:
-        sig_multiply = y_resampled
-        for i in range(4 * target_sr//len(y_resampled)-1): # this copies the short sound, adds noise and appends it to the other sound
-            sig_multiply = np.concatenate((sig_multiply,add_noise(y_resampled)), axis=0)
-        #print(f"file hase been multiplied by {4 * target_sr//len(y_resampled) }! check {path}")
-        sig = np.concatenate((sig_multiply, np.zeros(4 * target_sr - len(sig_multiply))), axis=0)
-    elif len(y_resampled) < 4 * target_sr:
+    #if 4 * target_sr//len(y_resampled) >1:
+    #    sig_multiply = y_resampled
+    #    for i in range(4 * target_sr//len(y_resampled)-1): # this copies the short sound, adds noise and appends it to the other sound
+    #        sig_multiply = np.concatenate((sig_multiply,add_noise(y_resampled)), axis=0)
+    #    #print(f"file hase been multiplied by {4 * target_sr//len(y_resampled) }! check {path}")
+    #    sig = np.concatenate((sig_multiply, np.zeros(4 * target_sr - len(sig_multiply))), axis=0)
+    if len(y_resampled) < 4 * target_sr:
         sig = np.concatenate((y_resampled, np.zeros(4 * target_sr - len(y_resampled))), axis=0)
     else:
         sig = y_resampled
@@ -91,7 +91,7 @@ def main_loop(metadata,dict):
     for i in tqdm.tqdm(range(len(metadata))):
         filename = 'sound_datasets/urbansound8k/audio/fold' + str(metadata["fold"][i]) + '/' + metadata["slice_file_name"][i]
         (sig, rate) = librosa.load(filename, sr=None,res_type="kaiser_fast")
-        sig_clean = data_preprocess(y=sig,sr=rate,target_sr=dict["sr"],path=filename)
+        sig_clean = data_preprocess(y=sig,sr=rate,target_sr=dict["sr"])
         # computes the MFCCs and Melspecs
         mfcc = get_mfcc(sig_clean,dict)
         melspec = get_mel_spec(sig_clean,dict)
@@ -128,13 +128,9 @@ def process_example(clip_nr,dict):
     mfcc = get_mfcc(sig_clean, dict)
     melspec = get_mel_spec(sig_clean, dict)
     print(melspec)
-    # we tried using the chromagram for features but it didn't work well
-    #chroma_stft = get_chroma_stft(sig_clean, dict)
-    feature_mfcc = [np.mean(mfcc.T, axis=0)]
-    feature_melspec = [np.mean(melspec.T, axis=0)]
     visualize(mfcc,dict["sr"],clip_info=clip_info)
     visualize(melspec,dict["sr"],clip_info=clip_info)
-    img = scale_minmax(mfcc, 0, 1).astype(np.float32)
+    img = scale_minmax(mfcc, 0, 255).astype(np.float32)
     img = np.flip(img, axis=0)
     print(img)
     #visualize(chroma_stft,dict["sr"],clip_info=clip_info)
@@ -194,5 +190,5 @@ if __name__== "__main__":
     # Metadata
     metadata = pd.read_csv('sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
     metadata.head(10)
-    #process_example(20,dict)
-    main_loop(metadata,dict)
+    process_example(100,dict)
+    #main_loop(metadata,dict)
