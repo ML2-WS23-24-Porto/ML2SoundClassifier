@@ -20,13 +20,13 @@ def download():
 def data_preprocess(y,sr,target_sr = 16000): #here we should perform noise reduction , zero padding and resampling,...?
     y_resampled = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
     # zero padding, duplicating sound
-    #if 4 * target_sr//len(y_resampled) >1:
-    #    sig_multiply = y_resampled
-    #    for i in range(4 * target_sr//len(y_resampled)-1): # this copies the short sound, adds noise and appends it to the other sound
-    #        sig_multiply = np.concatenate((sig_multiply,add_noise(y_resampled)), axis=0)
-    #    #print(f"file hase been multiplied by {4 * target_sr//len(y_resampled) }! check {path}")
-    #    sig = np.concatenate((sig_multiply, np.zeros(4 * target_sr - len(sig_multiply))), axis=0)
-    if len(y_resampled) < 4 * target_sr:
+    if 4 * target_sr//len(y_resampled) >1:
+        sig_multiply = y_resampled
+        for i in range(4 * target_sr//len(y_resampled)-1): # this copies the short sound, adds noise and appends it to the other sound
+            sig_multiply = np.concatenate((sig_multiply,add_noise(y_resampled)), axis=0)
+        #print(f"file hase been multiplied by {4 * target_sr//len(y_resampled) }! check {path}")
+        sig = np.concatenate((sig_multiply, np.zeros(4 * target_sr - len(sig_multiply))), axis=0)
+    elif len(y_resampled) < 4 * target_sr:
         sig = np.concatenate((y_resampled, np.zeros(4 * target_sr - len(y_resampled))), axis=0)
     else:
         sig = y_resampled
@@ -190,5 +190,5 @@ if __name__== "__main__":
     # Metadata
     metadata = pd.read_csv('sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
     metadata.head(10)
-    process_example(100,dict)
-    #main_loop(metadata,dict)
+    #process_example(100,dict)
+    main_loop(metadata,dict)
