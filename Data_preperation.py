@@ -1,12 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib
 import soundata
 import librosa
 from librosa import display
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
-import seaborn as sns
 import tqdm
 import os
 import skimage
@@ -82,14 +80,14 @@ def visualize(S,sr,clip_info): # for visualizing the spectograms
     plt.show()
 
 
-def main_loop(metadata,dict):
+def main_loop(metadata,dict, datahome):
     #  dict is a dictionary with all the calc parameters
     print("Processing " +str(len(metadata)) + " files")
     # create dataframes
     df = pd.DataFrame(columns=["slice_file_name","label","labelID","fold", "mean_mfcc", "mean_melspec","max_melspec","max_mfcc","median_melspec","median_mfcc","std_melspec","std_mfcc"])
 
     for i in tqdm.tqdm(range(len(metadata))):
-        filename = 'sound_datasets/urbansound8k/audio/fold' + str(metadata["fold"][i]) + '/' + metadata["slice_file_name"][i]
+        filename = str(datahome) + '/audio/fold' + str(metadata["fold"][i]) + '/' + metadata["slice_file_name"][i]
         (sig, rate) = librosa.load(filename, sr=None,res_type="kaiser_fast")
         sig_clean = data_preprocess(y=sig,sr=rate,target_sr=dict["sr"])
         # computes the MFCCs and Melspecs
@@ -110,8 +108,8 @@ def main_loop(metadata,dict):
     df.to_csv("processed_data.csv", index=False)
 
 
-def process_example(clip_nr,dict):
-    dataset = soundata.initialize(dataset_name='urbansound8k', data_home="sound_datasets/urbansound8k")
+def process_example(clip_nr,dict,datahome):
+    dataset = soundata.initialize(dataset_name='urbansound8k', data_home= datahome)
     ids = dataset.clip_ids  # the list of urbansound8k's clip ids
     clips = dataset.load_clips()
     example_clip = clips[ids[clip_nr]]  # Get clip
@@ -125,6 +123,8 @@ def process_example(clip_nr,dict):
     plt.show()
     mfcc = get_mfcc(sig_clean, dict)
     melspec = get_mel_spec(sig_clean, dict)
+    print("shapes:")
+    print(melspec.shape,mfcc.shape)
     visualize(mfcc,dict["sr"],clip_info=clip_info)
     visualize(melspec,dict["sr"],clip_info=clip_info)
     img = scale_minmax(mfcc, 0, 255).astype(np.float32)
@@ -169,28 +169,25 @@ def put_together_save(array1,array2, output_folder_type, fold,filename):
 
 # main loop for data prep:
 if __name__== "__main__":
+    # for downloading dataset
+    #download()
     # define parameters for data extraction
     dict = {}
     # MFCC parameters
-    dict["sr"] = 44100
+    dict["sr"] = 22500
     dict["n_mfcc"] = 36
     dict["hop_length"] = round(dict["sr"] * 0.125)
     dict["win_length"] = round(dict["sr"] * 0.023)
     dict["time_size"] = round(4 * dict["sr"] // dict["hop_length"]) + 1
     # MelSpec parameters
-    dict["n_fft"] = 2**14# Window length of fft
+    dict["n_fft"] = 2**13# Window length of fft
     dict["n_mels"] = 40
     dict["fmax"] = round(dict["sr"]/2)
 
-
-    # Metadata
-<<<<<<< HEAD:src/Data_preperation.py
-    metadata = pd.read_csv('../sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
-    metadata.head(10)
-    #process_example(100,dict)
-=======
+    # File locations
     metadata = pd.read_csv('sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
+    datahome = "sound_datasets/urbansound8k"
     # here you can decide to only process one example or the whole dataset
-    process_example(10,dict)
->>>>>>> 9b3a8dabf13f2ddef9fd831acba22ba82a0e201f:Data_preperation.py
-    main_loop(metadata,dict)
+    process_example(10,dict, datahome)
+    #main_loop(metadata,dict,datahome)
+
