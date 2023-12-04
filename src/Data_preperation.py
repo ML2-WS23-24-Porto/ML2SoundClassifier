@@ -188,7 +188,7 @@ if __name__== "__main__":
 
 
     # Metadata
-    metadata = pd.read_csv('sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
+    metadata = pd.read_csv('../sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
     metadata.head(10)
     #process_example(100,dict)
     main_loop(metadata,dict)
