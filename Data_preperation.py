@@ -62,23 +62,23 @@ def normalize_spectogram(clip): # bring spectograms in the form we want, suitabl
     print("\nNormalized DataFrame:")
     print(df_normalized)
 
-def scale_minmax(X, min=0.0, max=1.0):
+def scale_minmax(X, min=0.0, max=1.0): # scale
     X_std = (X - X.min()) / (X.max() - X.min())
     X_scaled = X_std * (max - min) + min
     return X_scaled
 
-def get_features(S):
+def get_features(S): # to get the features for the data frame
     mean = [np.mean(S.T,axis=0)]
     median = [np.median(S.T,axis=0)]
     max = [np.max(S.T,axis=0)]
     std = [np.std(S.T, axis=0)]
     return mean, max, median, std
 
-def visualize(S,sr,clip_info):
+def visualize(S,sr,clip_info): # for visualizing the spectograms
     fig, ax = plt.subplots()
     img = librosa.display.specshow(S, x_axis='time', y_axis='mel', sr=sr, fmax=8000, ax=ax)
     fig.colorbar(img, ax=ax, format='%+2.0f dB')
-    ax.set(title=f'Mel-frequency spectrogram of clip {clip_info} with samplerate {sr} Hz')
+    ax.set(title=f'Clip {clip_info}')
     plt.show()
 
 
@@ -110,8 +110,6 @@ def main_loop(metadata,dict):
     df.to_csv("processed_data.csv", index=False)
 
 
-
-
 def process_example(clip_nr,dict):
     dataset = soundata.initialize(dataset_name='urbansound8k', data_home="sound_datasets/urbansound8k")
     ids = dataset.clip_ids  # the list of urbansound8k's clip ids
@@ -127,12 +125,10 @@ def process_example(clip_nr,dict):
     plt.show()
     mfcc = get_mfcc(sig_clean, dict)
     melspec = get_mel_spec(sig_clean, dict)
-    print(melspec)
     visualize(mfcc,dict["sr"],clip_info=clip_info)
     visualize(melspec,dict["sr"],clip_info=clip_info)
     img = scale_minmax(mfcc, 0, 255).astype(np.float32)
     img = np.flip(img, axis=0)
-    print(img)
     #visualize(chroma_stft,dict["sr"],clip_info=clip_info)
 
 
@@ -171,9 +167,9 @@ def put_together_save(array1,array2, output_folder_type, fold,filename):
     skimage.io.imsave(full_path, img_both)
 
 
-
 # main loop for data prep:
 if __name__== "__main__":
+    # define parameters for data extraction
     dict = {}
     # MFCC parameters
     dict["sr"] = 44100
@@ -189,6 +185,6 @@ if __name__== "__main__":
 
     # Metadata
     metadata = pd.read_csv('sound_datasets/urbansound8k/metadata/UrbanSound8K.csv')
-    metadata.head(10)
-    #process_example(100,dict)
+    # here you can decide to only process one example or the whole dataset
+    process_example(10,dict)
     main_loop(metadata,dict)
