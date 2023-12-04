@@ -123,8 +123,6 @@ def process_example(clip_nr,dict,datahome):
     plt.show()
     mfcc = get_mfcc(sig_clean, dict)
     melspec = get_mel_spec(sig_clean, dict)
-    print("shapes:")
-    print(melspec.shape,mfcc.shape)
     visualize(mfcc,dict["sr"],clip_info=clip_info)
     visualize(melspec,dict["sr"],clip_info=clip_info)
     img = scale_minmax(mfcc, 0, 255).astype(np.float32)
