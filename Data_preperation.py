@@ -123,6 +123,8 @@ def process_example(clip_nr,dict,datahome):
     plt.show()
     mfcc = get_mfcc(sig_clean, dict)
     melspec = get_mel_spec(sig_clean, dict)
+    print("shapes:")
+    print(melspec.shape,mfcc.shape)
     visualize(mfcc,dict["sr"],clip_info=clip_info)
     visualize(melspec,dict["sr"],clip_info=clip_info)
     img = scale_minmax(mfcc, 0, 255).astype(np.float32)
@@ -172,13 +174,13 @@ if __name__== "__main__":
     # define parameters for data extraction
     dict = {}
     # MFCC parameters
-    dict["sr"] = 44100
+    dict["sr"] = 22500
     dict["n_mfcc"] = 36
     dict["hop_length"] = round(dict["sr"] * 0.125)
     dict["win_length"] = round(dict["sr"] * 0.023)
     dict["time_size"] = round(4 * dict["sr"] // dict["hop_length"]) + 1
     # MelSpec parameters
-    dict["n_fft"] = 2**14# Window length of fft
+    dict["n_fft"] = 2**13# Window length of fft
     dict["n_mels"] = 40
     dict["fmax"] = round(dict["sr"]/2)
 
@@ -187,4 +189,5 @@ if __name__== "__main__":
     datahome = "sound_datasets/urbansound8k"
     # here you can decide to only process one example or the whole dataset
     process_example(10,dict, datahome)
-    main_loop(metadata,dict,datahome)
+    #main_loop(metadata,dict,datahome)
+
